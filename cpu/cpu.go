@@ -2,11 +2,16 @@ package cpu
 
 import (
 	"fmt"
+	"go-boy/mmap"
 	"go-boy/rom"
 	"os"
 )
 
 type Rom = rom.Rom
+type Mmap = mmap.Mmap
+
+// http://www.codeslinger.co.uk/pages/projects/gameboy/beginning.html
+var MAX_CYCLES_PER_FRAME uint64 = 69905
 
 type Cpu struct {
 	AF uint16
@@ -16,7 +21,15 @@ type Cpu struct {
 	SP uint16
 	PC uint16
 
-	loadedRom *Rom
+	memory             *Mmap
+	loadedRom          *Rom
+	ranCyclesThisFrame uint64
+}
+
+func NewCpu() *Cpu {
+	cpu := Cpu{}
+	cpu.memory = &mmap.Mmap{}
+	return &cpu
 }
 
 func (c *Cpu) LoadRom(r *Rom) {
@@ -27,41 +40,118 @@ func (c *Cpu) LoadRom(r *Rom) {
 func (c *Cpu) Step() {
 	//fetch Instruction
 	instr, _ := c.loadedRom.ReadByte(c.PC)
+	c.ranCyclesThisFrame += 4 //instr fetch (and decode i guess) takes 4 (machine?) cycles
 	//decode/Execute
-	c.decodeExecute(instr)
+	c.ranCyclesThisFrame += c.decodeExecute(instr)
 }
 
-func (c *Cpu) decodeExecute(instr byte) {
+// returns machine cycles it took to execute
+func (c *Cpu) decodeExecute(instr byte) uint64 {
 	c.PC += 1
 
 	switch instr {
 
 	case 0xC3:
-		c.jumpWhen(c.GetZeroFlag() == 0)
+		return c.jump()
 	case 0xaf:
-		c.xorReg(REG_A)
+		return c.xorReg(REG_A)
 	case 0x21:
-		c.loadImm16Reg(REG_HL)
+		return c.loadImm16Reg(REG_HL)
 	case 0x0e:
-		c.loadImm8Reg(REG_A)
+		return c.loadImm8Reg(REG_A)
+	case 0x06:
+		return c.loadImm8Reg(REG_B)
+	case 0x32:
+		mc := c.storeInMemAddr(c.HL, c.GetA())
+		c.HL--
+		return mc
+	case 0x05:
+		return c.decrementReg8(REG_B)
+
 	default:
 		c.PC -= 1
 		fmt.Printf("ERROR: 0x%02x is not a recognized instruction!\n", instr)
 		fmt.Println("-----------------------------------------------------------------")
-		c.Dump()
+		c.DumpRegs()
 		fmt.Println("-----------------------------------------------------------------")
+		os.Exit(1)
+		return 0
+	}
+
+}
+
+func isHalfCarryFlagMinus(valA uint8, valB uint8, result uint8) bool {
+
+	return (valA^(-valB)^result)&0x10 != 0
+}
+
+func isHalfCarryFlagPlus(valA int, valB int, result int) bool {
+	return (valA^valB^result)&0x10 != 0
+}
+
+func (c *Cpu) decrementReg8(reg Reg8) uint64 {
+	var oldRegVal uint8
+	var newRegVal uint8
+
+	switch reg {
+	case REG_A:
+		oldRegVal = c.GetA()
+		newRegVal = oldRegVal - 1
+		c.SetA(newRegVal)
+
+	case REG_B:
+		oldRegVal = c.GetB()
+		newRegVal = oldRegVal - 1
+		c.SetB(newRegVal)
+
+	case REG_C:
+		oldRegVal = c.GetC()
+		newRegVal = oldRegVal - 1
+		c.SetC(newRegVal)
+
+	case REG_D:
+		oldRegVal = c.GetD()
+		newRegVal = oldRegVal - 1
+		c.SetD(newRegVal)
+
+	case REG_E:
+		oldRegVal = c.GetE()
+		newRegVal = oldRegVal - 1
+		c.SetE(newRegVal)
+
+	case REG_H:
+		oldRegVal = c.GetH()
+		newRegVal = oldRegVal - 1
+		c.SetH(newRegVal)
+
+	case REG_L:
+		oldRegVal = c.GetL()
+		newRegVal = oldRegVal - 1
+		c.SetL(newRegVal)
+
+	default:
+		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "decrementReg8", reg.String())
 		os.Exit(1)
 	}
 
+	c.SetZeroFlag(newRegVal == 0)
+	c.SetSubFlag(true)
+	c.SetHalfCarryFlag(isHalfCarryFlagMinus(oldRegVal, 1, newRegVal))
+
+	return 1
 }
 
-func (c *Cpu) jumpWhen(cond bool) {
-	if cond {
-		c.PC, _ = c.loadedRom.Read16(c.PC)
-	}
+func (c *Cpu) jump() uint64 {
+	c.PC, _ = c.loadedRom.Read16(c.PC)
+	return 4
 }
 
-func (c *Cpu) loadImm8Reg(reg Reg) {
+func (c *Cpu) storeInMemAddr(storeAddr uint16, toStore uint8) uint64 {
+	c.memory.SetValue(storeAddr, toStore)
+	return 2
+}
+
+func (c *Cpu) loadImm8Reg(reg Reg8) uint64 {
 	var skip uint16
 	var val uint8
 	val, skip = c.loadedRom.ReadByte(c.PC)
@@ -69,13 +159,26 @@ func (c *Cpu) loadImm8Reg(reg Reg) {
 	switch reg {
 	case REG_A:
 		c.SetA(val)
+	case REG_B:
+		c.SetB(val)
+	case REG_C:
+		c.SetC(val)
+	case REG_D:
+		c.SetD(val)
+	case REG_E:
+		c.SetE(val)
+	case REG_H:
+		c.SetH(val)
+	case REG_L:
+		c.SetL(val)
 	default:
 		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "loadImm8Reg", reg.String())
 		os.Exit(1)
 	}
+	return 2
 }
 
-func (c *Cpu) loadImm16Reg(reg Reg) {
+func (c *Cpu) loadImm16Reg(reg Reg16) uint64 {
 	var skip uint16
 	var val uint16
 
@@ -85,31 +188,52 @@ func (c *Cpu) loadImm16Reg(reg Reg) {
 	switch reg {
 	case REG_HL:
 		c.HL = val
+	case REG_BC:
+		c.BC = val
+	case REG_DE:
+		c.DE = val
+
 	default:
 		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "loadImm16Reg", reg.String())
 		os.Exit(1)
 	}
 
+	return 3
+
 }
 
-func (c *Cpu) xorReg(reg Reg) {
+func (c *Cpu) xorReg(reg Reg8) uint64 {
 
 	switch reg {
 	case REG_A:
 		c.SetA(0)
+	case REG_B:
+		c.SetB(0)
+	case REG_C:
+		c.SetC(0)
+	case REG_D:
+		c.SetD(0)
+	case REG_E:
+		c.SetE(0)
+	case REG_H:
+		c.SetH(0)
+	case REG_L:
+		c.SetL(0)
 	default:
 		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "xorReg", reg.String())
 		os.Exit(1)
 	}
 
-	c.SetZeroFlag(1)
-	c.SetCarryFlag(0)
-	c.SetHalfCarryFlag(0)
-	c.SetSubFlag(0)
+	c.SetZeroFlag(true)
+	c.SetCarryFlag(false)
+	c.SetHalfCarryFlag(false)
+	c.SetSubFlag(false)
+
+	return 1
 
 }
 
-func (c *Cpu) Dump() {
+func (c *Cpu) DumpRegs() {
 	fmt.Printf("Registers:\n\n")
 	fmt.Printf("A: 0x%02X\n", c.GetA())
 	fmt.Printf("F: 0x%02X\n", c.GetF())
@@ -183,34 +307,35 @@ func (c *Cpu) SetA(setTo uint8) {
 	c.AF = uint16(newF | newA<<8)
 }
 
-func (c *Cpu) SetZeroFlag(setTo int) { //z
-	if setTo == 1 {
+func (c *Cpu) SetZeroFlag(cond bool) { //z
+	if cond {
 		c.AF |= 1 << 7
-	} else if setTo == 0 {
+	} else {
 		c.AF &^= (1 << 7)
 	}
 }
 
-func (c *Cpu) SetSubFlag(setTo int) { //n
-	if setTo == 1 {
+func (c *Cpu) SetSubFlag(cond bool) { //n
+	if cond {
 		c.AF |= 1 << 6
-	} else if setTo == 0 {
+	} else {
 		c.AF &^= (1 << 6)
 	}
 }
 
-func (c *Cpu) SetHalfCarryFlag(setTo int) { //h
-	if setTo == 1 {
+func (c *Cpu) SetHalfCarryFlag(cond bool) { //h
+
+	if cond {
 		c.AF |= 1 << 5
-	} else if setTo == 0 {
+	} else {
 		c.AF &^= (1 << 5)
 	}
 }
 
-func (c *Cpu) SetCarryFlag(setTo int) { // c
-	if setTo == 1 {
+func (c *Cpu) SetCarryFlag(cond bool) { // c
+	if cond {
 		c.AF |= 1 << 4
-	} else if setTo == 0 {
+	} else {
 		c.AF &^= (1 << 4)
 	}
 }

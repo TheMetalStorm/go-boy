@@ -8,7 +8,8 @@ import (
 type Cpu = cpu.Cpu
 
 func main() {
-	cpu := Cpu{}
+
+	cpu := cpu.NewCpu()
 	rom := rom.NewRom("./games/Tetris.gb")
 
 	cpu.LoadRom(rom)
