@@ -80,12 +80,12 @@ func (c *Cpu) decodeExecute(instr byte) uint64 {
 
 }
 
-func isHalfCarryFlagMinus(valA uint8, valB uint8, result uint8) bool {
+func isHalfCarryFlagSubtraction(valA uint8, valB uint8, result uint8) bool {
 
 	return (valA^(-valB)^result)&0x10 != 0
 }
 
-func isHalfCarryFlagPlus(valA int, valB int, result int) bool {
+func isHalfCarryFlagAddition(valA int, valB int, result int) bool {
 	return (valA^valB^result)&0x10 != 0
 }
 
@@ -136,7 +136,7 @@ func (c *Cpu) decrementReg8(reg Reg8) uint64 {
 
 	c.SetZeroFlag(newRegVal == 0)
 	c.SetSubFlag(true)
-	c.SetHalfCarryFlag(isHalfCarryFlagMinus(oldRegVal, 1, newRegVal))
+	c.SetHalfCarryFlag(isHalfCarryFlagSubtraction(oldRegVal, 1, newRegVal))
 
 	return 1
 }
