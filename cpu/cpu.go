@@ -39,14 +39,14 @@ func (c *Cpu) LoadRom(r *Rom) {
 
 func (c *Cpu) Step() {
 	//fetch Instruction
-	instr, _ := c.loadedRom.ReadByte(c.PC)
+	instr, _ := c.loadedRom.ReadByteAt(c.PC)
 	c.ranCyclesThisFrame += 4 //instr fetch (and decode i guess) takes 4 (machine?) cycles
 	//decode/Execute
 	c.ranCyclesThisFrame += c.decodeExecute(instr)
 }
 
 // returns machine cycles it took to execute
-func (c *Cpu) decodeExecute(instr byte) uint64 {
+func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	c.PC += 1
 
 	switch instr {
@@ -67,7 +67,6 @@ func (c *Cpu) decodeExecute(instr byte) uint64 {
 		return mc
 	case 0x05:
 		return c.decrementReg8(REG_B)
-
 	default:
 		c.PC -= 1
 		fmt.Printf("ERROR: 0x%02x is not a recognized instruction!\n", instr)
@@ -89,7 +88,7 @@ func isHalfCarryFlagAddition(valA int, valB int, result int) bool {
 	return (valA^valB^result)&0x10 != 0
 }
 
-func (c *Cpu) decrementReg8(reg Reg8) uint64 {
+func (c *Cpu) decrementReg8(reg Reg8) (cycles uint64) {
 	var oldRegVal uint8
 	var newRegVal uint8
 
@@ -141,20 +140,20 @@ func (c *Cpu) decrementReg8(reg Reg8) uint64 {
 	return 1
 }
 
-func (c *Cpu) jump() uint64 {
-	c.PC, _ = c.loadedRom.Read16(c.PC)
+func (c *Cpu) jump() (cycles uint64) {
+	c.PC, _ = c.loadedRom.Read16At(c.PC)
 	return 4
 }
 
-func (c *Cpu) storeInMemAddr(storeAddr uint16, toStore uint8) uint64 {
+func (c *Cpu) storeInMemAddr(storeAddr uint16, toStore uint8) (cycles uint64) {
 	c.memory.SetValue(storeAddr, toStore)
 	return 2
 }
 
-func (c *Cpu) loadImm8Reg(reg Reg8) uint64 {
+func (c *Cpu) loadImm8Reg(reg Reg8) (cycles uint64) {
 	var skip uint16
 	var val uint8
-	val, skip = c.loadedRom.ReadByte(c.PC)
+	val, skip = c.loadedRom.ReadByteAt(c.PC)
 	c.PC += skip
 	switch reg {
 	case REG_A:
@@ -178,11 +177,11 @@ func (c *Cpu) loadImm8Reg(reg Reg8) uint64 {
 	return 2
 }
 
-func (c *Cpu) loadImm16Reg(reg Reg16) uint64 {
+func (c *Cpu) loadImm16Reg(reg Reg16) (cycles uint64) {
 	var skip uint16
 	var val uint16
 
-	val, skip = c.loadedRom.Read16(c.PC)
+	val, skip = c.loadedRom.Read16At(c.PC)
 	c.PC += skip
 
 	switch reg {
@@ -202,7 +201,7 @@ func (c *Cpu) loadImm16Reg(reg Reg16) uint64 {
 
 }
 
-func (c *Cpu) xorReg(reg Reg8) uint64 {
+func (c *Cpu) xorReg(reg Reg8) (cycles uint64) {
 
 	switch reg {
 	case REG_A:

@@ -18,11 +18,9 @@ func NewRom(path string) *Rom {
 	}
 	defer file.Close()
 
-	// Create a new reader
 	reader := bufio.NewReader(file)
 
 	rom := &Rom{}
-	// Read the file byte by byte
 	for {
 		b, err := reader.ReadByte()
 		if err != nil {
@@ -33,11 +31,13 @@ func NewRom(path string) *Rom {
 	return rom
 }
 
-func (r *Rom) ReadByte(address uint16) (byte, uint16) {
+// returns data and instructions to increment PC by
+func (r *Rom) ReadByteAt(address uint16) (data byte, numReadBytes uint16) {
 	return r.data[address], 1
 }
 
-func (r *Rom) Read16(address uint16) (uint16, uint16) {
+// returns data and instructions to increment PC by
+func (r *Rom) Read16At(address uint16) (data uint16, numReadBytes uint16) {
 	a1 := uint16(r.data[address])
 	a2 := uint16(r.data[address+1])
 
