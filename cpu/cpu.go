@@ -79,7 +79,6 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0x05:
 		return c.decrementReg8(REG_B)
 	case 0x20:
-		println(c.GetZeroFlag())
 		return c.jumpRelIf(c.GetZeroFlag() == 0)
 	case 0xcb:
 		return c.handleCB()
@@ -97,7 +96,7 @@ func (c *Cpu) handleCB() (cycles uint64) {
 	c.PC++
 	instr, numReadBytes := c.memory.ReadByteAt(c.PC)
 	c.PC += numReadBytes
-	fmt.Printf("Instr %02x\n", instr)
+	fmt.Printf("-> cb%02x\n", instr)
 
 	switch instr {
 	case 0x7c:
