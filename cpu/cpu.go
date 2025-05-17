@@ -63,11 +63,11 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 
 	//16 Load 16 Bit Imm to Reg
 	case 0x31:
-		return c.loadImm16Reg(REG_SP)
+		return c.loadImm16Reg(&c.SP)
 	case 0x21:
-		return c.loadImm16Reg(REG_HL)
+		return c.loadImm16Reg(&c.HL)
 	case 0x11:
-		return c.loadImm16Reg(REG_DE)
+		return c.loadImm16Reg(&c.DE)
 
 	// Load 8 Bit Imm to Reg
 	case 0x3e:
@@ -123,12 +123,37 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 
 	// push 16
 	case 0xc5:
-		return c.push16(REG_BC)
+		return c.push16(&c.BC)
+
+	// set ie
 	case 0xfb:
 		c.PC++
 		c.memory.Io.SetIE(1)
 		return 1
 
+	//RLA
+	//similiar to cbRegRotateLeft (other numBytes, numCycles and different flags)
+	case 0x17:
+		c.PC++
+		var newCarry bool
+		oldCarry := c.GetCarryFlag()
+
+		oldRegVal := c.GetA()
+		newRegVal := oldRegVal << 1
+
+		if oldCarry == 1 {
+			newRegVal |= 1
+		} else {
+			newRegVal &^= (1)
+		}
+
+		c.SetZeroFlag(false)
+		c.SetSubFlag(false)
+		c.SetHalfCarryFlag(false)
+		newCarry = ((oldRegVal >> 7 & 1) == 1)
+		c.SetCarryFlag(newCarry)
+
+		return 1
 	default:
 		fmt.Printf("ERROR: 0x%02x is not a recognized instruction!\n", instr)
 		fmt.Println("-----------------------------------------------------------------")
@@ -147,7 +172,9 @@ func (c *Cpu) handleCB() (cycles uint64) {
 
 	switch instr {
 	case 0x7c:
-		return c.bcSetZeroToComplementRegBit(REG_H, 7)
+		return c.cbSetZeroToComplementRegBit(REG_H, 7)
+	case 0x11:
+		return c.cbRegRotateLeft(REG_C)
 	default:
 		c.PC -= 2
 		fmt.Printf("ERROR: 0xcb%02x is not a recognized instruction!\n", instr)
@@ -160,7 +187,90 @@ func (c *Cpu) handleCB() (cycles uint64) {
 	}
 }
 
-func (c *Cpu) bcSetZeroToComplementRegBit(reg Reg8, bitPos int) uint64 {
+func (c *Cpu) cbRegRotateLeft(reg Reg8) uint64 {
+	var oldRegVal, newRegVal uint8
+	var oldCarry = c.GetCarryFlag()
+
+	var newCarry bool
+
+	switch reg {
+	case REG_A:
+		oldRegVal = c.GetA()
+		newRegVal = oldRegVal << 1
+		if oldCarry == 1 {
+			newRegVal |= 1
+		} else {
+			newRegVal &^= (1)
+		}
+		c.SetA(newRegVal)
+	case REG_B:
+		oldRegVal = c.GetB()
+		newRegVal = oldRegVal << 1
+		if oldCarry == 1 {
+			newRegVal |= 1
+		} else {
+			newRegVal &^= (1)
+		}
+		c.SetB(newRegVal)
+	case REG_C:
+		oldRegVal = c.GetC()
+		newRegVal = oldRegVal << 1
+		if oldCarry == 1 {
+			newRegVal |= 1
+		} else {
+			newRegVal &^= (1)
+		}
+		c.SetC(newRegVal)
+	case REG_D:
+		oldRegVal = c.GetD()
+		newRegVal = oldRegVal << 1
+		if oldCarry == 1 {
+			newRegVal |= 1
+		} else {
+			newRegVal &^= (1)
+		}
+		c.SetD(newRegVal)
+	case REG_E:
+		oldRegVal = c.GetE()
+		newRegVal = oldRegVal << 1
+		if oldCarry == 1 {
+			newRegVal |= 1
+		} else {
+			newRegVal &^= (1)
+		}
+		c.SetE(newRegVal)
+	case REG_H:
+		oldRegVal = c.GetH()
+		newRegVal = oldRegVal << 1
+		if oldCarry == 1 {
+			newRegVal |= 1
+		} else {
+			newRegVal &^= (1)
+		}
+		c.SetH(newRegVal)
+	case REG_L:
+		oldRegVal = c.GetL()
+		newRegVal = oldRegVal << 1
+		if oldCarry == 1 {
+			newRegVal |= 1
+		} else {
+			newRegVal &^= (1)
+		}
+		c.SetL(newRegVal)
+	default:
+		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "bcRegRotateLeft", reg.String())
+		os.Exit(1)
+	}
+
+	c.SetZeroFlag(newRegVal == 0)
+	c.SetSubFlag(false)
+	c.SetHalfCarryFlag(false)
+	newCarry = ((oldRegVal >> 7 & 1) == 1)
+	c.SetCarryFlag(newCarry)
+
+	return 2
+}
+func (c *Cpu) cbSetZeroToComplementRegBit(reg Reg8, bitPos int) uint64 {
 	var bit uint8
 
 	switch reg {
@@ -179,7 +289,7 @@ func (c *Cpu) bcSetZeroToComplementRegBit(reg Reg8, bitPos int) uint64 {
 	case REG_L:
 		bit = c.GetL() >> bitPos & 0x1
 	default:
-		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "bcSetZeroToRegBit", reg.String())
+		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "bcSetZeroToComplementRegBit", reg.String())
 		os.Exit(1)
 	}
 
@@ -202,23 +312,11 @@ func isHalfCarryFlagAddition(valA int, valB int, result int) bool {
 	return (valA^valB^result)&0x10 != 0
 }
 
-func (c *Cpu) push16(reg Reg16) (cycles uint64) {
-	var val uint16
+func (c *Cpu) push16(regPtr *uint16) (cycles uint64) {
+
 	c.PC++
 
-	switch reg {
-	case REG_HL:
-		val = c.HL
-	case REG_BC:
-		val = c.BC
-	case REG_DE:
-		val = c.DE
-	case REG_SP:
-		val = c.SP
-	default:
-		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "loadImm16Reg", reg.String())
-		os.Exit(1)
-	}
+	val := *regPtr
 
 	c.SP--
 	c.memory.SetValue(c.SP, getHigher(val))
@@ -482,27 +580,14 @@ func (c *Cpu) loadImm8Reg(reg Reg8) (cycles uint64) {
 	return 2
 }
 
-func (c *Cpu) loadImm16Reg(reg Reg16) (cycles uint64) {
+func (c *Cpu) loadImm16Reg(reg *uint16) (cycles uint64) {
 	var skip uint16
 	var val uint16
 
 	c.PC++
 	val, skip = c.memory.Read16At(c.PC)
 	c.PC += skip
-
-	switch reg {
-	case REG_HL:
-		c.HL = val
-	case REG_BC:
-		c.BC = val
-	case REG_DE:
-		c.DE = val
-	case REG_SP:
-		c.SP = val
-	default:
-		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "loadImm16Reg", reg.String())
-		os.Exit(1)
-	}
+	*reg = val
 
 	return 3
 
