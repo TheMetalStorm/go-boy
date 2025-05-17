@@ -10,11 +10,14 @@ type Cpu = cpu.Cpu
 func main() {
 
 	cpu := cpu.NewCpu()
-	rom := rom.NewRom("./games/Tetris.gb")
+	//toLoad := rom.NewRom("./games/Tetris.gb")
+	bootrom := rom.NewRom("./bootroms/dmg_boot.bin")
 
-	cpu.LoadRom(rom)
+	cpu.LoadBootRom(bootrom)
+	// cpu.PatchBootRom(bootrom)
 
 	for {
 		cpu.Step()
+
 	}
 }

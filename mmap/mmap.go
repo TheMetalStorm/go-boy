@@ -55,6 +55,87 @@ func (m *Mmap) SetValue(address uint16, value uint8) {
 	}
 }
 
+func (m *Mmap) Read16At(address uint16) (data uint16, numReadBytes uint16) {
+	switch {
+	case address < 0x4000:
+		a1 := uint16(m.bank0[address])
+		a2 := uint16(m.bank0[address+1])
+		return uint16(a1 | a2<<8), 2
+	case address < 0x8000:
+		a1 := uint16(m.bank1[address-0x4000])
+		a2 := uint16(m.bank1[address-0x4000+1])
+		return uint16(a1 | a2<<8), 2
+	case address < 0xa000:
+		a1 := uint16(m.vram[address-0x8000])
+		a2 := uint16(m.vram[address-0x8000+1])
+		return uint16(a1 | a2<<8), 2
+	case address < 0xc000:
+		a1 := uint16(m.extram[address-0xa000])
+		a2 := uint16(m.extram[address-0xa000+1])
+		return uint16(a1 | a2<<8), 2
+	case address < 0xd000:
+		a1 := uint16(m.wram1[address-0xc000])
+		a2 := uint16(m.wram1[address-0xc000+1])
+		return uint16(a1 | a2<<8), 2
+	case address < 0xe000:
+		a1 := uint16(m.wram2[address-0xd000])
+		a2 := uint16(m.wram2[address-0xd000+1])
+		return uint16(a1 | a2<<8), 2
+	case address < 0xfe00:
+		a1 := uint16(m.echoram[address-0xe000])
+		a2 := uint16(m.echoram[address-0xe000+1])
+		return uint16(a1 | a2<<8), 2
+	case address < 0xff00:
+		a1 := uint16(m.oam[address-0xfe00])
+		a2 := uint16(m.oam[address-0xfe00+1])
+		return uint16(a1 | a2<<8), 2
+	case address < 0xff80:
+		a1 := uint16(m.nu[address-0xff00])
+		a2 := uint16(m.nu[address-0xff00+1])
+		return uint16(a1 | a2<<8), 2
+	case address < 0xfffe:
+		a1 := uint16(m.io.Regs[address-0xff80])
+		a2 := uint16(m.io.Regs[address-0xff80+1])
+		return uint16(a1 | a2<<8), 2
+	case address == 0xfffe:
+		a1 := uint16(m.hram[address-0xff80])
+		a2 := uint16(m.hram[address-0xff80+1])
+		return uint16(a1 | a2<<8), 2
+	}
+	return 0, 2
+}
+
+func (m *Mmap) ReadByteAt(address uint16) (val uint8, bytesRead uint16) {
+
+	switch {
+	case address < 0x4000:
+		return m.bank0[address], 1
+	case address < 0x8000:
+		return m.bank1[address-0x4000], 1
+	case address < 0xa000:
+		return m.vram[address-0x8000], 1
+	case address < 0xc000:
+		return m.extram[address-0xa000], 1
+	case address < 0xd000:
+		return m.wram1[address-0xc000], 1
+	case address < 0xe000:
+		return m.wram2[address-0xd000], 1
+	case address < 0xfe00:
+		return m.echoram[address-0xe000], 1
+	case address < 0xff00:
+		return m.oam[address-0xfe00], 1
+	case address < 0xff80:
+		return m.nu[address-0xff00], 1
+	case address < 0xfffe:
+		return m.io.Regs[address-0xff80], 1
+	case address == 0xfffe:
+		return m.hram[address-0xff80], 1
+	case address == 0xffff:
+		return m.ie, 1
+	}
+	return 0, 0
+}
+
 // Dump
 
 func (m *Mmap) Dump() {
