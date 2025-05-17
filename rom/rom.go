@@ -31,15 +31,19 @@ func NewRom(path string) *Rom {
 	return rom
 }
 
-// returns data and instructions to increment PC by
-func (r *Rom) ReadByteAt(address uint16) (data byte, numReadBytes uint16) {
-	return r.data[address], 1
+func (r *Rom) Dump() {
+
+	for idx := 0; idx < len(r.data); idx += 16 {
+		fmt.Printf("%04x ", uint16(idx))
+		for j := 0; j < 16 && idx+j < len(r.data); j++ {
+			fmt.Printf("%02x ", r.data[idx+j])
+		}
+		fmt.Println()
+	}
+
 }
 
 // returns data and instructions to increment PC by
-func (r *Rom) Read16At(address uint16) (data uint16, numReadBytes uint16) {
-	a1 := uint16(r.data[address])
-	a2 := uint16(r.data[address+1])
-
-	return uint16(a1 | a2<<8), 2
+func (r *Rom) ReadByteAt(address uint16) (data byte, numReadBytes uint16) {
+	return r.data[address], 1
 }
