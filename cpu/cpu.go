@@ -12,6 +12,7 @@ type Mmap = mmap.Mmap
 
 // http://www.codeslinger.co.uk/pages/projects/gameboy/beginning.html
 var MAX_CYCLES_PER_FRAME uint64 = 69905
+var IO_START_ADDR uint16 = 0xff00
 
 type Cpu struct {
 	AF uint16
@@ -41,10 +42,6 @@ func (c *Cpu) LoadBootRom(r *Rom) {
 
 }
 
-func (c *Cpu) LoadRom(r *Rom) {
-
-}
-
 func (c *Cpu) Step() {
 
 	//fetch Instruction
@@ -60,28 +57,78 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 
 	switch instr {
 
+	//cb
+	case 0xcb:
+		return c.handleCB()
+
+	//16 Load 16 Bit Imm to Reg
 	case 0x31:
 		return c.loadImm16Reg(REG_SP)
-	case 0xC3:
-		return c.jump()
-	case 0xaf:
-		return c.xorReg(REG_A)
 	case 0x21:
 		return c.loadImm16Reg(REG_HL)
-	case 0x0e:
+	case 0x11:
+		return c.loadImm16Reg(REG_DE)
+
+	// Load 8 Bit Imm to Reg
+	case 0x3e:
 		return c.loadImm8Reg(REG_A)
 	case 0x06:
 		return c.loadImm8Reg(REG_B)
-	case 0x32:
-		mc := c.storeInMemAddr(c.HL, c.GetA())
-		c.HL--
-		return mc
+	case 0x0e:
+		return c.loadImm8Reg(REG_C)
+
+	// decrement Reg8
 	case 0x05:
 		return c.decrementReg8(REG_B)
+
+	// increment Reg8
+	case 0x0c:
+		return c.incrementReg8(REG_C)
+
+	//jump
+	case 0xC3:
+		return c.jump()
 	case 0x20:
 		return c.jumpRelIf(c.GetZeroFlag() == 0)
-	case 0xcb:
-		return c.handleCB()
+
+	// xor Reg
+	case 0xaf:
+		return c.xorReg(REG_A)
+
+	//store reg in mem
+	case 0x32:
+		mc := c.storeRegInMemAddr(c.HL, c.GetA())
+		c.HL--
+		return mc
+	case 0xe2:
+		return c.storeRegInMemAddr(IO_START_ADDR+uint16(c.GetC()), c.GetA())
+
+	case 0x77:
+		return c.storeRegInMemAddr(c.HL, c.GetA())
+
+	//store reg in imm mem
+	case 0xe0:
+		return c.storeRegInImmMemAddr(c.GetA())
+
+	//store mem in reg
+	case 0x1a:
+		return c.storeMemInReg(c.DE, REG_A)
+
+	// store val in Reg
+	case 0x4f:
+		return c.storeValInReg(REG_C, c.GetA())
+	// call
+	case 0xcd:
+		return c.call16Imm()
+
+	// push 16
+	case 0xc5:
+		return c.push16(REG_BC)
+	case 0xfb:
+		c.PC++
+		c.memory.Io.SetIE(1)
+		return 1
+
 	default:
 		fmt.Printf("ERROR: 0x%02x is not a recognized instruction!\n", instr)
 		fmt.Println("-----------------------------------------------------------------")
@@ -155,6 +202,123 @@ func isHalfCarryFlagAddition(valA int, valB int, result int) bool {
 	return (valA^valB^result)&0x10 != 0
 }
 
+func (c *Cpu) push16(reg Reg16) (cycles uint64) {
+	var val uint16
+	c.PC++
+
+	switch reg {
+	case REG_HL:
+		val = c.HL
+	case REG_BC:
+		val = c.BC
+	case REG_DE:
+		val = c.DE
+	case REG_SP:
+		val = c.SP
+	default:
+		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "loadImm16Reg", reg.String())
+		os.Exit(1)
+	}
+
+	c.SP--
+	c.memory.SetValue(c.SP, getHigher(val))
+	c.SP--
+	c.memory.SetValue(c.SP, getLower(val))
+
+	return 4
+}
+
+func (c *Cpu) storeValInReg(reg Reg8, val uint8) (cycles uint64) {
+	c.PC++
+	switch reg {
+	case REG_A:
+		c.SetA(val)
+	case REG_B:
+		c.SetB(val)
+	case REG_C:
+		c.SetC(val)
+	case REG_D:
+		c.SetD(val)
+	case REG_E:
+		c.SetE(val)
+	case REG_H:
+		c.SetH(val)
+	case REG_L:
+		c.SetL(val)
+	default:
+		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "storeMemInRegs", reg.String())
+		os.Exit(1)
+	}
+
+	return 1
+}
+
+// In memory, push the program counter PC value corresponding to the address following the CALL instruction to the 2 bytes
+// following the byte specified by the current stack pointer SP. Then load the 16-bit immediate operand a16 into PC.
+func (c *Cpu) call16Imm() (cycles uint64) {
+
+	c.PC++
+	newPCAddr, bytesRead := c.memory.Read16At(c.PC)
+	c.PC += bytesRead
+
+	// With the push, the current value of SP is decremented by 1, and the higher-order byte of PC is loaded in the
+	// memory address specified by the new SP value. The value of SP is then decremented by 1 again, and the lower-order
+	//byte of PC is loaded in the memory address specified by that value of SP.
+	c.SP--
+	c.memory.SetValue(c.SP, getHigher(c.PC))
+	c.SP--
+	c.memory.SetValue(c.SP, getLower(c.PC)) // lower order byte of PC
+
+	//The subroutine is placed after the location specified by the new PC value. When the subroutine finishes, control is
+	//returned to the source program using a return instruction and by popping the starting address of the next
+	//instruction (which was just pushed) and moving it to the PC.
+	c.PC = newPCAddr
+	// The lower-order byte of a16 is placed in byte 2 of the object code, and the higher-order byte is placed in byte 3.
+
+	newPCAddrHigher := getHigher(c.PC)
+	newPCAddrLower := getLower(c.PC)
+	c.memory.Oam[2] = newPCAddrLower
+	c.memory.Oam[3] = newPCAddrHigher
+
+	return 6
+}
+
+func (c *Cpu) storeMemInReg(address uint16, reg Reg8) (cycles uint64) {
+
+	val, bytesRead := c.memory.ReadByteAt(address)
+	c.PC += bytesRead
+
+	switch reg {
+	case REG_A:
+		c.SetA(val)
+	case REG_B:
+		c.SetB(val)
+	case REG_C:
+		c.SetC(val)
+	case REG_D:
+		c.SetD(val)
+	case REG_E:
+		c.SetE(val)
+	case REG_H:
+		c.SetH(val)
+	case REG_L:
+		c.SetL(val)
+	default:
+		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "storeMemInRegs", reg.String())
+		os.Exit(1)
+	}
+
+	return 2
+}
+
+func (c *Cpu) storeRegInImmMemAddr(val uint8) (cycles uint64) {
+	c.PC++
+	a8, bytesRead := c.memory.ReadByteAt(c.PC)
+	c.PC += bytesRead
+	c.memory.SetValue(IO_START_ADDR+uint16(a8), val)
+	return 3
+}
+
 func (c *Cpu) jumpRelIf(cond bool) (cycles uint64) {
 	c.PC++
 
@@ -226,12 +390,65 @@ func (c *Cpu) decrementReg8(reg Reg8) (cycles uint64) {
 	return 1
 }
 
+func (c *Cpu) incrementReg8(reg Reg8) (cycles uint64) {
+	var oldRegVal uint8
+	var newRegVal uint8
+
+	switch reg {
+	case REG_A:
+		oldRegVal = c.GetA()
+		newRegVal = oldRegVal + 1
+		c.SetA(newRegVal)
+
+	case REG_B:
+		oldRegVal = c.GetB()
+		newRegVal = oldRegVal + 1
+		c.SetB(newRegVal)
+
+	case REG_C:
+		oldRegVal = c.GetC()
+		newRegVal = oldRegVal + 1
+		c.SetC(newRegVal)
+
+	case REG_D:
+		oldRegVal = c.GetD()
+		newRegVal = oldRegVal + 1
+		c.SetD(newRegVal)
+
+	case REG_E:
+		oldRegVal = c.GetE()
+		newRegVal = oldRegVal + 1
+		c.SetE(newRegVal)
+
+	case REG_H:
+		oldRegVal = c.GetH()
+		newRegVal = oldRegVal + 1
+		c.SetH(newRegVal)
+
+	case REG_L:
+		oldRegVal = c.GetL()
+		newRegVal = oldRegVal + 1
+		c.SetL(newRegVal)
+
+	default:
+		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "incrementReg8", reg.String())
+		os.Exit(1)
+	}
+
+	c.SetZeroFlag(newRegVal == 0)
+	c.SetSubFlag(false)
+	c.SetHalfCarryFlag(isHalfCarryFlagAddition(int(oldRegVal), 1, int(newRegVal)))
+
+	c.PC++
+	return 1
+}
+
 func (c *Cpu) jump() (cycles uint64) {
 	c.PC, _ = c.memory.Read16At(c.PC + 1)
 	return 4
 }
 
-func (c *Cpu) storeInMemAddr(storeAddr uint16, toStore uint8) (cycles uint64) {
+func (c *Cpu) storeRegInMemAddr(storeAddr uint16, toStore uint8) (cycles uint64) {
 	c.memory.SetValue(storeAddr, toStore)
 	c.PC++
 	return 2
@@ -321,6 +538,14 @@ func (c *Cpu) xorReg(reg Reg8) (cycles uint64) {
 	c.PC++
 	return 1
 
+}
+
+func getHigher(orig uint16) uint8 {
+	return uint8(orig >> 8 & 0xFF)
+}
+
+func getLower(orig uint16) uint8 {
+	return uint8(orig)
 }
 
 func (c *Cpu) DumpRegs() {
