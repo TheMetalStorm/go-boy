@@ -15,10 +15,15 @@ var MAX_CYCLES_PER_FRAME uint64 = 69905
 var IO_START_ADDR uint16 = 0xff00
 
 type Cpu struct {
-	AF uint16
-	BC uint16
-	DE uint16
-	HL uint16
+	A uint8
+	F uint8
+	B uint8
+	C uint8
+	D uint8
+	E uint8
+	H uint8
+	L uint8
+
 	SP uint16
 	PC uint16
 
@@ -65,25 +70,25 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0x31:
 		return c.loadImm16Reg(&c.SP)
 	case 0x21:
-		return c.loadImm16Reg(&c.HL)
+		return c.loadImm16Reg2Ptr(&c.H, &c.L)
 	case 0x11:
-		return c.loadImm16Reg(&c.DE)
+		return c.loadImm16Reg2Ptr(&c.D, &c.E)
 
 	// Load 8 Bit Imm to Reg
 	case 0x3e:
-		return c.loadImm8Reg(REG_A)
+		return c.loadImm8Reg(&c.A)
 	case 0x06:
-		return c.loadImm8Reg(REG_B)
+		return c.loadImm8Reg(&c.B)
 	case 0x0e:
-		return c.loadImm8Reg(REG_C)
+		return c.loadImm8Reg(&c.C)
 
 	// decrement Reg8
 	case 0x05:
-		return c.decrementReg8(REG_B)
+		return c.decrementReg8(&c.B)
 
 	// increment Reg8
 	case 0x0c:
-		return c.incrementReg8(REG_C)
+		return c.incrementReg8(&c.C)
 
 	//jump
 	case 0xC3:
@@ -93,37 +98,38 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 
 	// xor Reg
 	case 0xaf:
-		return c.xorReg(REG_A)
+		return c.xorReg(&c.A)
 
 	//store reg in mem
 	case 0x32:
-		mc := c.storeRegInMemAddr(c.HL, c.GetA())
-		c.HL--
+		hl := c.GetHL()
+		mc := c.storeRegInMemAddr(hl, c.A)
+		c.SetHL(hl - 1)
 		return mc
 	case 0xe2:
-		return c.storeRegInMemAddr(IO_START_ADDR+uint16(c.GetC()), c.GetA())
+		return c.storeRegInMemAddr(IO_START_ADDR+uint16(c.C), c.A)
 
 	case 0x77:
-		return c.storeRegInMemAddr(c.HL, c.GetA())
+		return c.storeRegInMemAddr(c.GetHL(), c.A)
 
 	//store reg in imm mem
 	case 0xe0:
-		return c.storeRegInImmMemAddr(c.GetA())
+		return c.storeRegInImmMemAddr(c.A)
 
 	//store mem in reg
 	case 0x1a:
-		return c.storeMemInReg(c.DE, REG_A)
+		return c.storeMemInReg(c.GetDE(), &c.A)
 
 	// store val in Reg
 	case 0x4f:
-		return c.storeValInReg(REG_C, c.GetA())
+		return c.storeValInReg(&c.C, c.A)
 	// call
 	case 0xcd:
 		return c.call16Imm()
 
 	// push 16
 	case 0xc5:
-		return c.push16(&c.BC)
+		return c.push16(&c.B, &c.C)
 
 	// set ie
 	case 0xfb:
@@ -138,13 +144,13 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		var newCarry bool
 		oldCarry := c.GetCarryFlag()
 
-		oldRegVal := c.GetA()
-		newRegVal := oldRegVal << 1
+		oldRegVal := c.A
+		c.A = oldRegVal << 1
 
 		if oldCarry == 1 {
-			newRegVal |= 1
+			c.A |= 1
 		} else {
-			newRegVal &^= (1)
+			c.A &^= (1)
 		}
 
 		c.SetZeroFlag(false)
@@ -172,9 +178,9 @@ func (c *Cpu) handleCB() (cycles uint64) {
 
 	switch instr {
 	case 0x7c:
-		return c.cbSetZeroToComplementRegBit(REG_H, 7)
+		return c.cbSetZeroToComplementRegBit(&c.H, 7)
 	case 0x11:
-		return c.cbRegRotateLeft(REG_C)
+		return c.cbRegRotateLeft(&c.C)
 	default:
 		c.PC -= 2
 		fmt.Printf("ERROR: 0xcb%02x is not a recognized instruction!\n", instr)
@@ -187,82 +193,20 @@ func (c *Cpu) handleCB() (cycles uint64) {
 	}
 }
 
-func (c *Cpu) cbRegRotateLeft(reg Reg8) uint64 {
-	var oldRegVal, newRegVal uint8
+func (c *Cpu) cbRegRotateLeft(regPtr *uint8) uint64 {
+	var oldRegVal uint8
 	var oldCarry = c.GetCarryFlag()
-
 	var newCarry bool
 
-	switch reg {
-	case REG_A:
-		oldRegVal = c.GetA()
-		newRegVal = oldRegVal << 1
-		if oldCarry == 1 {
-			newRegVal |= 1
-		} else {
-			newRegVal &^= (1)
-		}
-		c.SetA(newRegVal)
-	case REG_B:
-		oldRegVal = c.GetB()
-		newRegVal = oldRegVal << 1
-		if oldCarry == 1 {
-			newRegVal |= 1
-		} else {
-			newRegVal &^= (1)
-		}
-		c.SetB(newRegVal)
-	case REG_C:
-		oldRegVal = c.GetC()
-		newRegVal = oldRegVal << 1
-		if oldCarry == 1 {
-			newRegVal |= 1
-		} else {
-			newRegVal &^= (1)
-		}
-		c.SetC(newRegVal)
-	case REG_D:
-		oldRegVal = c.GetD()
-		newRegVal = oldRegVal << 1
-		if oldCarry == 1 {
-			newRegVal |= 1
-		} else {
-			newRegVal &^= (1)
-		}
-		c.SetD(newRegVal)
-	case REG_E:
-		oldRegVal = c.GetE()
-		newRegVal = oldRegVal << 1
-		if oldCarry == 1 {
-			newRegVal |= 1
-		} else {
-			newRegVal &^= (1)
-		}
-		c.SetE(newRegVal)
-	case REG_H:
-		oldRegVal = c.GetH()
-		newRegVal = oldRegVal << 1
-		if oldCarry == 1 {
-			newRegVal |= 1
-		} else {
-			newRegVal &^= (1)
-		}
-		c.SetH(newRegVal)
-	case REG_L:
-		oldRegVal = c.GetL()
-		newRegVal = oldRegVal << 1
-		if oldCarry == 1 {
-			newRegVal |= 1
-		} else {
-			newRegVal &^= (1)
-		}
-		c.SetL(newRegVal)
-	default:
-		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "bcRegRotateLeft", reg.String())
-		os.Exit(1)
+	oldRegVal = *regPtr
+	*regPtr = oldRegVal << 1
+	if oldCarry == 1 {
+		*regPtr |= 1
+	} else {
+		*regPtr &^= (1)
 	}
 
-	c.SetZeroFlag(newRegVal == 0)
+	c.SetZeroFlag(*regPtr == 0)
 	c.SetSubFlag(false)
 	c.SetHalfCarryFlag(false)
 	newCarry = ((oldRegVal >> 7 & 1) == 1)
@@ -270,28 +214,10 @@ func (c *Cpu) cbRegRotateLeft(reg Reg8) uint64 {
 
 	return 2
 }
-func (c *Cpu) cbSetZeroToComplementRegBit(reg Reg8, bitPos int) uint64 {
+func (c *Cpu) cbSetZeroToComplementRegBit(regPtr *uint8, bitPos int) uint64 {
 	var bit uint8
 
-	switch reg {
-	case REG_A:
-		bit = c.GetA() >> bitPos & 0x1
-	case REG_B:
-		bit = c.GetB() >> bitPos & 0x1
-	case REG_C:
-		bit = c.GetC() >> bitPos & 0x1
-	case REG_D:
-		bit = c.GetD() >> bitPos & 0x1
-	case REG_E:
-		bit = c.GetE() >> bitPos & 0x1
-	case REG_H:
-		bit = c.GetH() >> bitPos & 0x1
-	case REG_L:
-		bit = c.GetL() >> bitPos & 0x1
-	default:
-		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "bcSetZeroToComplementRegBit", reg.String())
-		os.Exit(1)
-	}
+	bit = *regPtr >> bitPos & 0x1
 
 	if bit == 0 {
 		c.SetZeroFlag(true)
@@ -312,42 +238,21 @@ func isHalfCarryFlagAddition(valA int, valB int, result int) bool {
 	return (valA^valB^result)&0x10 != 0
 }
 
-func (c *Cpu) push16(regPtr *uint16) (cycles uint64) {
+func (c *Cpu) push16(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles uint64) {
 
 	c.PC++
 
-	val := *regPtr
-
 	c.SP--
-	c.memory.SetValue(c.SP, getHigher(val))
+	c.memory.SetValue(c.SP, *higherRegPtr)
 	c.SP--
-	c.memory.SetValue(c.SP, getLower(val))
+	c.memory.SetValue(c.SP, *lowerRegPtr)
 
 	return 4
 }
 
-func (c *Cpu) storeValInReg(reg Reg8, val uint8) (cycles uint64) {
+func (c *Cpu) storeValInReg(regPtr *uint8, val uint8) (cycles uint64) {
 	c.PC++
-	switch reg {
-	case REG_A:
-		c.SetA(val)
-	case REG_B:
-		c.SetB(val)
-	case REG_C:
-		c.SetC(val)
-	case REG_D:
-		c.SetD(val)
-	case REG_E:
-		c.SetE(val)
-	case REG_H:
-		c.SetH(val)
-	case REG_L:
-		c.SetL(val)
-	default:
-		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "storeMemInRegs", reg.String())
-		os.Exit(1)
-	}
-
+	*regPtr = val
 	return 1
 }
 
@@ -381,30 +286,12 @@ func (c *Cpu) call16Imm() (cycles uint64) {
 	return 6
 }
 
-func (c *Cpu) storeMemInReg(address uint16, reg Reg8) (cycles uint64) {
+func (c *Cpu) storeMemInReg(address uint16, regPtr *uint8) (cycles uint64) {
 
 	val, bytesRead := c.memory.ReadByteAt(address)
 	c.PC += bytesRead
 
-	switch reg {
-	case REG_A:
-		c.SetA(val)
-	case REG_B:
-		c.SetB(val)
-	case REG_C:
-		c.SetC(val)
-	case REG_D:
-		c.SetD(val)
-	case REG_E:
-		c.SetE(val)
-	case REG_H:
-		c.SetH(val)
-	case REG_L:
-		c.SetL(val)
-	default:
-		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "storeMemInRegs", reg.String())
-		os.Exit(1)
-	}
+	*regPtr = val
 
 	return 2
 }
@@ -435,107 +322,26 @@ func (c *Cpu) jumpRelIf(cond bool) (cycles uint64) {
 	return 2
 
 }
-func (c *Cpu) decrementReg8(reg Reg8) (cycles uint64) {
-	var oldRegVal uint8
-	var newRegVal uint8
+func (c *Cpu) decrementReg8(regPtr *uint8) (cycles uint64) {
 
-	switch reg {
-	case REG_A:
-		oldRegVal = c.GetA()
-		newRegVal = oldRegVal - 1
-		c.SetA(newRegVal)
+	oldRegVal := *regPtr
+	*regPtr = oldRegVal - 1
 
-	case REG_B:
-		oldRegVal = c.GetB()
-		newRegVal = oldRegVal - 1
-		c.SetB(newRegVal)
-
-	case REG_C:
-		oldRegVal = c.GetC()
-		newRegVal = oldRegVal - 1
-		c.SetC(newRegVal)
-
-	case REG_D:
-		oldRegVal = c.GetD()
-		newRegVal = oldRegVal - 1
-		c.SetD(newRegVal)
-
-	case REG_E:
-		oldRegVal = c.GetE()
-		newRegVal = oldRegVal - 1
-		c.SetE(newRegVal)
-
-	case REG_H:
-		oldRegVal = c.GetH()
-		newRegVal = oldRegVal - 1
-		c.SetH(newRegVal)
-
-	case REG_L:
-		oldRegVal = c.GetL()
-		newRegVal = oldRegVal - 1
-		c.SetL(newRegVal)
-
-	default:
-		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "decrementReg8", reg.String())
-		os.Exit(1)
-	}
-
-	c.SetZeroFlag(newRegVal == 0)
+	c.SetZeroFlag(*regPtr == 0)
 	c.SetSubFlag(true)
-	c.SetHalfCarryFlag(isHalfCarryFlagSubtraction(oldRegVal, 1, newRegVal))
+	c.SetHalfCarryFlag(isHalfCarryFlagSubtraction(oldRegVal, 1, *regPtr))
 
 	c.PC++
 	return 1
 }
 
-func (c *Cpu) incrementReg8(reg Reg8) (cycles uint64) {
-	var oldRegVal uint8
-	var newRegVal uint8
+func (c *Cpu) incrementReg8(regPtr *uint8) (cycles uint64) {
+	oldRegVal := *regPtr
+	*regPtr = oldRegVal + 1
 
-	switch reg {
-	case REG_A:
-		oldRegVal = c.GetA()
-		newRegVal = oldRegVal + 1
-		c.SetA(newRegVal)
-
-	case REG_B:
-		oldRegVal = c.GetB()
-		newRegVal = oldRegVal + 1
-		c.SetB(newRegVal)
-
-	case REG_C:
-		oldRegVal = c.GetC()
-		newRegVal = oldRegVal + 1
-		c.SetC(newRegVal)
-
-	case REG_D:
-		oldRegVal = c.GetD()
-		newRegVal = oldRegVal + 1
-		c.SetD(newRegVal)
-
-	case REG_E:
-		oldRegVal = c.GetE()
-		newRegVal = oldRegVal + 1
-		c.SetE(newRegVal)
-
-	case REG_H:
-		oldRegVal = c.GetH()
-		newRegVal = oldRegVal + 1
-		c.SetH(newRegVal)
-
-	case REG_L:
-		oldRegVal = c.GetL()
-		newRegVal = oldRegVal + 1
-		c.SetL(newRegVal)
-
-	default:
-		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "incrementReg8", reg.String())
-		os.Exit(1)
-	}
-
-	c.SetZeroFlag(newRegVal == 0)
+	c.SetZeroFlag(*regPtr == 0)
 	c.SetSubFlag(false)
-	c.SetHalfCarryFlag(isHalfCarryFlagAddition(int(oldRegVal), 1, int(newRegVal)))
+	c.SetHalfCarryFlag(isHalfCarryFlagAddition(int(oldRegVal), 1, int(*regPtr)))
 
 	c.PC++
 	return 1
@@ -546,37 +352,23 @@ func (c *Cpu) jump() (cycles uint64) {
 	return 4
 }
 
-func (c *Cpu) storeRegInMemAddr(storeAddr uint16, toStore uint8) (cycles uint64) {
-	c.memory.SetValue(storeAddr, toStore)
+func (c *Cpu) storeRegInMemAddr(address uint16, toStore uint8) (cycles uint64) {
+
+	c.memory.SetValue(address, toStore)
+
 	c.PC++
 	return 2
 }
 
-func (c *Cpu) loadImm8Reg(reg Reg8) (cycles uint64) {
+func (c *Cpu) loadImm8Reg(regPtr *uint8) (cycles uint64) {
 	var skip uint16
 	var val uint8
 	c.PC++
 	val, skip = c.memory.ReadByteAt(c.PC)
 	c.PC += skip
-	switch reg {
-	case REG_A:
-		c.SetA(val)
-	case REG_B:
-		c.SetB(val)
-	case REG_C:
-		c.SetC(val)
-	case REG_D:
-		c.SetD(val)
-	case REG_E:
-		c.SetE(val)
-	case REG_H:
-		c.SetH(val)
-	case REG_L:
-		c.SetL(val)
-	default:
-		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "loadImm8Reg", reg.String())
-		os.Exit(1)
-	}
+
+	*regPtr = val
+
 	return 2
 }
 
@@ -593,27 +385,24 @@ func (c *Cpu) loadImm16Reg(reg *uint16) (cycles uint64) {
 
 }
 
-func (c *Cpu) xorReg(reg Reg8) (cycles uint64) {
+func (c *Cpu) loadImm16Reg2Ptr(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles uint64) {
+	var skip uint16
+	var val uint16
 
-	switch reg {
-	case REG_A:
-		c.SetA(0)
-	case REG_B:
-		c.SetB(0)
-	case REG_C:
-		c.SetC(0)
-	case REG_D:
-		c.SetD(0)
-	case REG_E:
-		c.SetE(0)
-	case REG_H:
-		c.SetH(0)
-	case REG_L:
-		c.SetL(0)
-	default:
-		fmt.Printf("ERROR: func %s, %s is not a recognized implemented!\n", "xorReg", reg.String())
-		os.Exit(1)
-	}
+	c.PC++
+	val, skip = c.memory.Read16At(c.PC)
+	c.PC += skip
+
+	*higherRegPtr = getHigher(val)
+	*lowerRegPtr = getLower(val)
+
+	return 3
+
+}
+
+func (c *Cpu) xorReg(regPtr *uint8) (cycles uint64) {
+
+	*regPtr = 0
 
 	c.SetZeroFlag(true)
 	c.SetCarryFlag(false)
@@ -635,143 +424,104 @@ func getLower(orig uint16) uint8 {
 
 func (c *Cpu) DumpRegs() {
 	fmt.Printf("Registers:\n\n")
-	fmt.Printf("A: 0x%02X\n", c.GetA())
-	fmt.Printf("F: 0x%02X\n", c.GetF())
-	fmt.Printf("B: 0x%02X\n", c.GetB())
-	fmt.Printf("C: 0x%02X\n", c.GetC())
-	fmt.Printf("D: 0x%02X\n", c.GetD())
-	fmt.Printf("E: 0x%02X\n", c.GetE())
-	fmt.Printf("H: 0x%02X\n", c.GetH())
-	fmt.Printf("L: 0x%02X\n", c.GetL())
+	fmt.Printf("A: 0x%02X\n", c.A)
+	fmt.Printf("F: 0x%02X\n", c.F)
+	fmt.Printf("B: 0x%02X\n", c.B)
+	fmt.Printf("C: 0x%02X\n", c.C)
+	fmt.Printf("D: 0x%02X\n", c.D)
+	fmt.Printf("E: 0x%02X\n", c.E)
+	fmt.Printf("H: 0x%02X\n", c.H)
+	fmt.Printf("L: 0x%02X\n", c.L)
 	fmt.Printf("SP: 0x%04X\n", c.SP)
 	fmt.Printf("PC: 0x%04X\n", c.PC)
 }
 
-// Getters for high and low bytes
-func (c *Cpu) GetA() uint8 {
-	return uint8(c.AF >> 8)
+func (c *Cpu) GetAF() uint16 {
+	return uint16(c.A)<<8 | uint16(c.F)
 }
 
-func (c *Cpu) GetF() uint8 {
-	return uint8(c.AF & 0xFF)
+func (c *Cpu) GetBC() uint16 {
+	return uint16(c.B)<<8 | uint16(c.C)
+}
+
+func (c *Cpu) GetDE() uint16 {
+	return uint16(c.D)<<8 | uint16(c.E)
+
+}
+
+func (c *Cpu) GetHL() uint16 {
+	return uint16(c.H)<<8 | uint16(c.L)
+
 }
 
 func (c *Cpu) GetZeroFlag() uint8 { //z
-	return (c.GetF() >> 0x7) & 0x1
+	return (c.F >> 0x7) & 0x1
 }
 
 func (c *Cpu) GetSubFlag() uint8 { //n
-	return (c.GetF() >> 0x6) & 0x1
+	return (c.F >> 0x6) & 0x1
 
 }
 
 func (c *Cpu) GetHalfCarryFlag() uint8 { //h
-	return (c.GetF() >> 0x5) & 0x1
+	return (c.F >> 0x5) & 0x1
 
 }
 
 func (c *Cpu) GetCarryFlag() uint8 { // c
-	return (c.GetF() >> 0x4) & 0x1
-
-}
-
-func (c *Cpu) GetB() uint8 {
-	return uint8(c.BC >> 8)
-}
-
-func (c *Cpu) GetC() uint8 {
-	return uint8(c.BC & 0xFF)
-}
-
-func (c *Cpu) GetD() uint8 {
-	return uint8(c.DE >> 8)
-}
-
-func (c *Cpu) GetE() uint8 {
-	return uint8(c.DE & 0xFF)
-}
-
-func (c *Cpu) GetH() uint8 {
-	return uint8(c.HL >> 8)
-}
-
-func (c *Cpu) GetL() uint8 {
-	return uint8(c.HL & 0xFF)
+	return (c.F >> 0x4) & 0x1
 }
 
 //Setter
 
-func (c *Cpu) SetA(setTo uint8) {
-	newF := uint16(c.GetF())
-	newA := uint16(setTo)
-	c.AF = uint16(newF | newA<<8)
+func (c *Cpu) SetAF(value uint16) {
+	c.A = uint8(value >> 8)
+	c.F = uint8(value)
 }
 
+func (c *Cpu) SetBC(value uint16) {
+	c.B = uint8(value >> 8)
+	c.C = uint8(value)
+}
+
+func (c *Cpu) SetDE(value uint16) {
+	c.D = uint8(value >> 8)
+	c.E = uint8(value)
+}
+
+func (c *Cpu) SetHL(value uint16) {
+	c.H = uint8(value >> 8)
+	c.L = uint8(value)
+}
 func (c *Cpu) SetZeroFlag(cond bool) { //z
 	if cond {
-		c.AF |= 1 << 7
+		c.SetAF(c.GetAF() | 1<<7)
 	} else {
-		c.AF &^= (1 << 7)
+		c.SetAF(c.GetAF() &^ (1 << 7))
 	}
 }
 
 func (c *Cpu) SetSubFlag(cond bool) { //n
 	if cond {
-		c.AF |= 1 << 6
+		c.SetAF(c.GetAF() | 1<<6)
 	} else {
-		c.AF &^= (1 << 6)
+		c.SetAF(c.GetAF() &^ (1 << 6))
 	}
 }
 
 func (c *Cpu) SetHalfCarryFlag(cond bool) { //h
 
 	if cond {
-		c.AF |= 1 << 5
+		c.SetAF(c.GetAF() | 1<<5)
 	} else {
-		c.AF &^= (1 << 5)
+		c.SetAF(c.GetAF() &^ (1 << 5))
 	}
 }
 
 func (c *Cpu) SetCarryFlag(cond bool) { // c
 	if cond {
-		c.AF |= 1 << 4
+		c.SetAF(c.GetAF() | 1<<4)
 	} else {
-		c.AF &^= (1 << 4)
+		c.SetAF(c.GetAF() &^ (1 << 4))
 	}
-}
-
-func (c *Cpu) SetB(setTo uint8) {
-	newC := uint16(c.GetC())
-	newB := uint16(setTo)
-	c.BC = uint16(newC | newB<<8)
-}
-
-func (c *Cpu) SetC(setTo uint8) {
-	newC := uint16(setTo)
-	newB := uint16(c.GetB())
-	c.BC = uint16(newC | newB<<8)
-}
-
-func (c *Cpu) SetD(setTo uint8) {
-	newE := uint16(c.GetE())
-	newD := uint16(setTo)
-	c.DE = uint16(newE | newD<<8)
-}
-
-func (c *Cpu) SetE(setTo uint8) {
-	newE := uint16(setTo)
-	newD := uint16(c.GetD())
-	c.DE = uint16(newE | newD<<8)
-}
-
-func (c *Cpu) SetH(setTo uint8) {
-	newL := uint16(c.GetL())
-	newH := uint16(setTo)
-	c.HL = uint16(newL | newH<<8)
-}
-
-func (c *Cpu) SetL(setTo uint8) {
-	newL := uint16(setTo)
-	newH := uint16(c.GetH())
-	c.HL = uint16(newL | newH<<8)
 }
