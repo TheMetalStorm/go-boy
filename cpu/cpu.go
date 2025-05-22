@@ -30,6 +30,8 @@ type Cpu struct {
 	memory *Mmap
 	//loadedRom          *Rom
 	ranCyclesThisFrame uint64
+
+	Autorun bool
 }
 
 func NewCpu() *Cpu {
@@ -68,7 +70,8 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 
 	//16 Load 16 Bit Imm to Reg
 	case 0x31:
-		return c.loadImm16Reg(&c.SP)
+		r := c.loadImm16Reg(&c.SP)
+		return r
 	case 0x21:
 		return c.loadImm16Reg2Ptr(&c.H, &c.L)
 	case 0x11:
@@ -90,17 +93,43 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0x0c:
 		return c.incrementReg8(&c.C)
 
+	// increment Reg16
+	case 0x23:
+		return c.incrementReg16(REG_HL)
 	//jump
 	case 0xC3:
 		return c.jump()
 	case 0x20:
 		return c.jumpRelIf(c.GetZeroFlag() == 0)
+		// call
+	case 0xcd:
+		return c.call16Imm()
+	//ret
+	case 0xc9:
+		//TODO
+
+		readLow, _ := c.memory.ReadByteAt(c.SP)
+		c.SP++
+
+		readHigh, _ := c.memory.ReadByteAt(c.SP)
+		c.SP++
+		newPC := (uint16(readLow) | uint16(readHigh)<<8)
+		fmt.Printf("RETURN: going from %04x to %04x\n", c.PC, newPC)
+
+		c.PC = newPC
+
+		return 4
 
 	// xor Reg
 	case 0xaf:
 		return c.xorReg(&c.A)
 
-	//store reg in mem
+		//store reg in mem
+	case 0x22:
+		hl := c.GetHL()
+		mc := c.storeRegInMemAddr(hl, c.A)
+		c.SetHL(hl + 1)
+		return mc
 	case 0x32:
 		hl := c.GetHL()
 		mc := c.storeRegInMemAddr(hl, c.A)
@@ -123,13 +152,16 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	// store val in Reg
 	case 0x4f:
 		return c.storeValInReg(&c.C, c.A)
-	// call
-	case 0xcd:
-		return c.call16Imm()
 
 	// push 16
+	case 0xf5:
+		return c.push16(&c.A, &c.F)
 	case 0xc5:
 		return c.push16(&c.B, &c.C)
+
+	// pop 16
+	case 0xc1:
+		return c.pop16(&c.B, &c.C)
 
 	// set ie
 	case 0xfb:
@@ -238,6 +270,20 @@ func isHalfCarryFlagAddition(valA int, valB int, result int) bool {
 	return (valA^valB^result)&0x10 != 0
 }
 
+func (c *Cpu) pop16(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles uint64) {
+	c.PC++
+
+	readLow, _ := c.memory.ReadByteAt(c.SP)
+	*lowerRegPtr = readLow
+	c.SP++
+
+	readHigh, _ := c.memory.ReadByteAt(c.SP)
+	*higherRegPtr = readHigh
+	c.SP++
+
+	return 3
+}
+
 func (c *Cpu) push16(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles uint64) {
 
 	c.PC++
@@ -272,12 +318,15 @@ func (c *Cpu) call16Imm() (cycles uint64) {
 	c.SP--
 	c.memory.SetValue(c.SP, getLower(c.PC)) // lower order byte of PC
 
+	fmt.Printf("CALL: going from %04x ", c.PC)
+
 	//The subroutine is placed after the location specified by the new PC value. When the subroutine finishes, control is
 	//returned to the source program using a return instruction and by popping the starting address of the next
 	//instruction (which was just pushed) and moving it to the PC.
+	fmt.Printf("to %04x\n", newPCAddr)
+
 	c.PC = newPCAddr
 	// The lower-order byte of a16 is placed in byte 2 of the object code, and the higher-order byte is placed in byte 3.
-
 	newPCAddrHigher := getHigher(c.PC)
 	newPCAddrLower := getLower(c.PC)
 	c.memory.Oam[2] = newPCAddrLower
@@ -345,6 +394,24 @@ func (c *Cpu) incrementReg8(regPtr *uint8) (cycles uint64) {
 
 	c.PC++
 	return 1
+}
+
+func (c *Cpu) incrementReg16(reg Reg16) (cycles uint64) {
+	c.PC++
+
+	switch reg {
+	case REG_AF:
+		c.SetAF(c.GetAF() + 1)
+	case REG_BC:
+		c.SetBC(c.GetBC() + 1)
+	case REG_DE:
+		c.SetDE(c.GetDE() + 1)
+	case REG_HL:
+		c.SetHL(c.GetHL() + 1)
+	default:
+		fmt.Printf("ERROR: Func %s, reg %s not Implemented!", "incrementReg16", reg.String())
+	}
+	return 2
 }
 
 func (c *Cpu) jump() (cycles uint64) {
@@ -420,6 +487,11 @@ func getHigher(orig uint16) uint8 {
 
 func getLower(orig uint16) uint8 {
 	return uint8(orig)
+}
+func (c *Cpu) br() {
+	c.DumpRegs()
+	c.memory.DumpHram()
+	c.Autorun = false
 }
 
 func (c *Cpu) DumpRegs() {

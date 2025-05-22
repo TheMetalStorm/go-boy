@@ -30,79 +30,153 @@ func (m *Mmap) SetValue(address uint16, value uint8) {
 	switch {
 	case address < 0x4000:
 		m.Bank0[address] = value
+
 	case address < 0x8000:
 		m.Bank1[address-0x4000] = value
-	case address < 0xa000:
+
+	case address < 0xA000:
 		m.Vram[address-0x8000] = value
-	case address < 0xc000:
-		m.Extram[address-0xa000] = value
-	case address < 0xd000:
-		m.Wram1[address-0xc000] = value
-	case address < 0xe000:
-		m.Wram2[address-0xd000] = value
-	case address < 0xfe00:
-		m.Echoram[address-0xe000] = value
-	case address < 0xff00:
-		m.Oam[address-0xfe00] = value
-	case address < 0xff80:
-		m.Nu[address-0xff00] = value
-	case address < 0xfffe:
-		m.Io.SetAtAdress(address-0xff80, value)
-	case address == 0xfffe:
-		m.Hram[address-0xff80] = value
-	case address == 0xffff:
+
+	case address < 0xC000:
+		m.Extram[address-0xA000] = value
+
+	case address < 0xD000:
+		m.Wram1[address-0xC000] = value
+
+	case address < 0xE000:
+		m.Wram2[address-0xD000] = value
+
+	case address < 0xFE00:
+		m.Echoram[address-0xE000] = value
+
+	case address < 0xFEA0:
+		m.Oam[address-0xFE00] = value
+
+	case address < 0xFF00:
+		m.Nu[address-0xFEA0] = value
+
+	case address < 0xFF80:
+		m.Hram[address-0xFF00] = value
+
+	case address < 0xFFFF:
+		m.Hram[address-0xFF80] = value
+
+	case address == 0xFFFF:
 		m.Ie = value
 	}
+
 }
 
+// func (m *Mmap) Read16At(address uint16) (data uint16, numReadBytes uint16) {
+// 	switch {
+// 	case address < 0x4000:
+// 		a1 := uint16(m.Bank0[address])
+// 		a2 := uint16(m.Bank0[address+1])
+// 		return uint16(a1 | a2<<8), 2
+// 	case address < 0x8000:
+// 		a1 := uint16(m.Bank1[address-0x4000])
+// 		a2 := uint16(m.Bank1[address-0x4000+1])
+// 		return uint16(a1 | a2<<8), 2
+// 	case address < 0xa000:
+// 		a1 := uint16(m.Vram[address-0x8000])
+// 		a2 := uint16(m.Vram[address-0x8000+1])
+// 		return uint16(a1 | a2<<8), 2
+// 	case address < 0xc000:
+// 		a1 := uint16(m.Extram[address-0xa000])
+// 		a2 := uint16(m.Extram[address-0xa000+1])
+// 		return uint16(a1 | a2<<8), 2
+// 	case address < 0xd000:
+// 		a1 := uint16(m.Wram1[address-0xc000])
+// 		a2 := uint16(m.Wram1[address-0xc000+1])
+// 		return uint16(a1 | a2<<8), 2
+// 	case address < 0xe000:
+// 		a1 := uint16(m.Wram2[address-0xd000])
+// 		a2 := uint16(m.Wram2[address-0xd000+1])
+// 		return uint16(a1 | a2<<8), 2
+// 	case address < 0xfe00:
+// 		a1 := uint16(m.Echoram[address-0xe000])
+// 		a2 := uint16(m.Echoram[address-0xe000+1])
+// 		return uint16(a1 | a2<<8), 2
+// 	case address < 0xff00:
+// 		a1 := uint16(m.Oam[address-0xfe00])
+// 		a2 := uint16(m.Oam[address-0xfe00+1])
+// 		return uint16(a1 | a2<<8), 2
+// 	case address < 0xff80:
+// 		a1 := uint16(m.Nu[address-0xff00])
+// 		a2 := uint16(m.Nu[address-0xff00+1])
+// 		return uint16(a1 | a2<<8), 2
+// 	case address < 0xfffe:
+// 		a1 := uint16(m.Io.Regs[address-0xff80])
+// 		a2 := uint16(m.Io.Regs[address-0xff80+1])
+// 		return uint16(a1 | a2<<8), 2
+// 	case address == 0xfffe:
+// 		a1 := uint16(m.Hram[address-0xff80])
+// 		a2 := uint16(m.Hram[address-0xff80+1])
+// 		return uint16(a1 | a2<<8), 2
+// 	}
+// 	return 0, 2
+// }
+
 func (m *Mmap) Read16At(address uint16) (data uint16, numReadBytes uint16) {
+
 	switch {
-	case address < 0x4000:
+	case address < 0x4000-1:
 		a1 := uint16(m.Bank0[address])
 		a2 := uint16(m.Bank0[address+1])
 		return uint16(a1 | a2<<8), 2
-	case address < 0x8000:
+
+	case address < 0x8000-1:
 		a1 := uint16(m.Bank1[address-0x4000])
 		a2 := uint16(m.Bank1[address-0x4000+1])
 		return uint16(a1 | a2<<8), 2
-	case address < 0xa000:
+
+	case address < 0xA000-1:
 		a1 := uint16(m.Vram[address-0x8000])
 		a2 := uint16(m.Vram[address-0x8000+1])
 		return uint16(a1 | a2<<8), 2
-	case address < 0xc000:
+
+	case address < 0xC000-1:
 		a1 := uint16(m.Extram[address-0xa000])
 		a2 := uint16(m.Extram[address-0xa000+1])
 		return uint16(a1 | a2<<8), 2
-	case address < 0xd000:
+
+	case address < 0xD000-1:
 		a1 := uint16(m.Wram1[address-0xc000])
 		a2 := uint16(m.Wram1[address-0xc000+1])
 		return uint16(a1 | a2<<8), 2
-	case address < 0xe000:
+
+	case address < 0xE000-1:
 		a1 := uint16(m.Wram2[address-0xd000])
 		a2 := uint16(m.Wram2[address-0xd000+1])
 		return uint16(a1 | a2<<8), 2
-	case address < 0xfe00:
+
+	case address < 0xFE00-1:
 		a1 := uint16(m.Echoram[address-0xe000])
 		a2 := uint16(m.Echoram[address-0xe000+1])
 		return uint16(a1 | a2<<8), 2
-	case address < 0xff00:
-		a1 := uint16(m.Oam[address-0xfe00])
-		a2 := uint16(m.Oam[address-0xfe00+1])
+
+	case address < 0xFEA0-1:
+		a1 := uint16(m.Oam[address-0xFE00])
+		a2 := uint16(m.Oam[address-0xFE00+1])
 		return uint16(a1 | a2<<8), 2
-	case address < 0xff80:
-		a1 := uint16(m.Nu[address-0xff00])
-		a2 := uint16(m.Nu[address-0xff00+1])
+
+	case address < 0xFF00-1:
+		a1 := uint16(m.Nu[address-0xFEA0])
+		a2 := uint16(m.Nu[address-0xFEA0+1])
 		return uint16(a1 | a2<<8), 2
-	case address < 0xfffe:
-		a1 := uint16(m.Io.Regs[address-0xff80])
-		a2 := uint16(m.Io.Regs[address-0xff80+1])
+
+	case address < 0xFF80-1:
+		a1 := uint16(m.Io.Regs[address-0xFF00])
+		a2 := uint16(m.Io.Regs[address-0xFF00+1])
 		return uint16(a1 | a2<<8), 2
-	case address == 0xfffe:
+
+	case address < 0xFFFE-1:
 		a1 := uint16(m.Hram[address-0xff80])
 		a2 := uint16(m.Hram[address-0xff80+1])
 		return uint16(a1 | a2<<8), 2
+
 	}
-	return 0, 2
+	return 0, 0
 }
 
 func (m *Mmap) ReadByteAt(address uint16) (val uint8, bytesRead uint16) {
@@ -110,27 +184,38 @@ func (m *Mmap) ReadByteAt(address uint16) (val uint8, bytesRead uint16) {
 	switch {
 	case address < 0x4000:
 		return m.Bank0[address], 1
+
 	case address < 0x8000:
 		return m.Bank1[address-0x4000], 1
-	case address < 0xa000:
+
+	case address < 0xA000:
 		return m.Vram[address-0x8000], 1
-	case address < 0xc000:
-		return m.Extram[address-0xa000], 1
-	case address < 0xd000:
-		return m.Wram1[address-0xc000], 1
-	case address < 0xe000:
-		return m.Wram2[address-0xd000], 1
-	case address < 0xfe00:
-		return m.Echoram[address-0xe000], 1
-	case address < 0xff00:
-		return m.Oam[address-0xfe00], 1
-	case address < 0xff80:
-		return m.Nu[address-0xff00], 1
-	case address < 0xfffe:
-		return m.Io.Regs[address-0xff80], 1
-	case address == 0xfffe:
-		return m.Hram[address-0xff80], 1
-	case address == 0xffff:
+
+	case address < 0xC000:
+		return m.Extram[address-0xA000], 1
+
+	case address < 0xD000:
+		return m.Wram1[address-0xC000], 1
+
+	case address < 0xE000:
+		return m.Wram2[address-0xD000], 1
+
+	case address < 0xFE00:
+		return m.Echoram[address-0xE000], 1
+
+	case address < 0xFEA0:
+		return m.Oam[address-0xFE00], 1
+
+	case address < 0xFF00:
+		return m.Nu[address-0xFEA0], 1
+
+	case address < 0xFF80:
+		return m.Hram[address-0xFF00], 1
+
+	case address < 0xFFFF:
+		return m.Hram[address-0xFF80], 1
+
+	case address == 0xFFFF:
 		return m.Ie, 1
 	}
 	return 0, 0
