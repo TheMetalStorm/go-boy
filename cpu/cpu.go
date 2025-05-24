@@ -32,11 +32,14 @@ type Cpu struct {
 	ranCyclesThisFrame uint64
 
 	Autorun bool
+	DoStep  bool
 }
 
 func NewCpu() *Cpu {
 	cpu := Cpu{}
 	cpu.memory = &mmap.Mmap{}
+	cpu.Autorun = true
+	cpu.DoStep = false
 	return &cpu
 }
 
