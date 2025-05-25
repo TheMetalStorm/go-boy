@@ -4,7 +4,9 @@ import (
 	"go-boy/cpu"
 	"go-boy/rom"
 	"go-boy/widgets"
+
 	//"gioui.org/app"
+	g "github.com/AllenDang/giu"
 )
 
 type Cpu = cpu.Cpu
@@ -12,16 +14,35 @@ type Split = widgets.Split
 
 var c *cpu.Cpu = cpu.NewCpu()
 
+func onStartButton() {
+	c.Autorun = true
+}
+
+func onStopButton() {
+	c.Autorun = false
+}
+
+func onStepButton() {
+	c.DoStep = true
+}
+
+func loop() {
+	g.SingleWindow().Layout(
+		g.Row(
+			g.Labelf("0x%04x", c.PC),
+			g.Button("Start").OnClick(onStartButton),
+			g.Button("Stop").OnClick(onStopButton),
+			g.Button("Step").OnClick(onStepButton),
+		),
+	)
+}
+
 func main() {
 
-	// go func() {
-	// 	window := new(app.Window)
-	// 	err := run(window)
-	// 	if err != nil {
-	// 		log.Fatal(err)
-	// 	}
-	// 	os.Exit(0)
-	// }()
+	go func() {
+		wnd := g.NewMasterWindow("Hello world", 500, 500, g.MasterWindowFlagsNotResizable)
+		wnd.Run(loop)
+	}()
 	emulate()
 	//app.Main()
 
@@ -34,7 +55,7 @@ func emulate() {
 
 	c.LoadBootRom(bootrom)
 	// cpu.PatchBootRom(bootrom)
-	c.Autorun = true
+	c.Autorun = false
 
 	for {
 		if c.Autorun {
