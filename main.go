@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go-boy/cpu"
 	"go-boy/rom"
+	"go-boy/widgets"
 	"log"
 	"os"
 
@@ -16,6 +17,7 @@ import (
 )
 
 type Cpu = cpu.Cpu
+type Split = widgets.Split
 
 var c *cpu.Cpu = cpu.NewCpu()
 
@@ -62,8 +64,13 @@ func run(window *app.Window) error {
 	theme := material.NewTheme()
 	var ops op.Ops
 	var runButton widget.Clickable
+	var stopButton widget.Clickable
 	var stepButton widget.Clickable
+	var regListState widget.List
+	regListState.Axis = layout.Vertical
 
+	var split Split
+	split.MaxHeight = unit.Dp(200)
 	stepClickedNow := false
 
 	column := layout.Flex{
@@ -75,32 +82,6 @@ func run(window *app.Window) error {
 		switch e := window.Event().(type) {
 		case app.DestroyEvent:
 			return e.Err
-			// case app.FrameEvent:
-			// 	// This graphics context is used for managing the rendering state.
-			// 	gtx := app.NewContext(&ops, e)
-			// 	stepButton := material.Button(theme, &stepButton, "Step")
-
-			// 	autoRunButton := material.Button(theme, &runButton, "Run")
-
-			// 	// Define an large label with an appropriate text:
-			// 	var s string = strconv.FormatUint(uint64(c.PC), 10)
-			// 	title := material.H1(theme, "PC: "+s)
-
-			// 	// Change the color of the label.
-			// 	maroon := color.NRGBA{R: 127, G: 0, B: 0, A: 255}
-			// 	title.Color = maroon
-
-			// 	// Change the position of the label.
-			// 	title.Alignment = text.Middle
-
-			// 	// Draw the label to the graphics context.
-			// 	title.Layout(gtx)
-			// 	stepButton.Layout(gtx)
-			// 	autoRunButton.Layout(gtx)
-			// 	// title := material.Button(theme, )
-			// 	// Pass the drawing operations to the GPU.
-			// 	e.Frame(gtx.Ops)
-
 		case app.FrameEvent:
 			gtx := app.NewContext(&ops, e)
 			// Let's try out the flexbox layout:
@@ -110,12 +91,41 @@ func run(window *app.Window) error {
 				// Empty space is left at the start, i.e. at the top
 				Spacing: layout.SpaceStart,
 			}.Layout(gtx,
+				layout.Rigid(
+					func(gtx layout.Context) layout.Dimensions {
+						list := [10]string{}
+						list[0] = fmt.Sprintf("Reg A: 0x%04x", c.A)
+						list[1] = fmt.Sprintf("Reg F: 0x%04x (0b%08b)", c.F, c.F)
+						list[2] = fmt.Sprintf("Reg B: 0x%04x", c.B)
+						list[3] = fmt.Sprintf("Reg C: 0x%04x", c.C)
+						list[4] = fmt.Sprintf("Reg D: 0x%04x", c.D)
+						list[5] = fmt.Sprintf("Reg E: 0x%04x", c.E)
+						list[6] = fmt.Sprintf("Reg H: 0x%04x", c.H)
+						list[7] = fmt.Sprintf("Reg L: 0x%04x", c.L)
+						list[8] = fmt.Sprintf("SP: 0x%04x", c.SP)
+						list[9] = fmt.Sprintf("PC: 0x%04x", c.PC)
+
+						return material.List(theme, &regListState).Layout(gtx, 10, func(gtx layout.Context, index int) layout.Dimensions {
+							return layout.Stack{}.Layout(gtx,
+								layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+
+									return layout.UniformInset(unit.Dp(8)).Layout(gtx, material.Body1(theme, list[index]).Layout)
+								}),
+							)
+						})
+					},
+				),
 
 				layout.Rigid(
 					func(gtx layout.Context) layout.Dimensions {
-						format := fmt.Sprintf("%04x", c.PC)
-						btn := material.H4(theme, "PC :0x"+format)
-						return btn.Layout(gtx)
+
+						return split.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							a := material.H1(theme, "Hello")
+							return a.Layout(gtx)
+						}, func(gtx layout.Context) layout.Dimensions {
+							a := material.H1(theme, "World")
+							return a.Layout(gtx)
+						})
 					},
 				),
 				layout.Rigid(
@@ -130,6 +140,12 @@ func run(window *app.Window) error {
 							layout.Rigid(
 								func(gtx layout.Context) layout.Dimensions {
 									btn := material.Button(theme, &stepButton, "Step")
+									return btn.Layout(gtx)
+								},
+							),
+							layout.Rigid(
+								func(gtx layout.Context) layout.Dimensions {
+									btn := material.Button(theme, &stopButton, "Stop")
 									return btn.Layout(gtx)
 								},
 							),
@@ -153,6 +169,9 @@ func run(window *app.Window) error {
 
 			if runButton.Pressed() {
 				c.Autorun = true
+			}
+			if stopButton.Pressed() {
+				c.Autorun = false
 			}
 			e.Frame(gtx.Ops)
 
