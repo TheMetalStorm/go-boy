@@ -4,13 +4,14 @@ import (
 	"fmt"
 	"go-boy/cpu"
 	"go-boy/rom"
+	"slices"
 
 	g "github.com/AllenDang/giu"
 )
 
 type Cpu = cpu.Cpu
 
-var splitPos float32 = 300
+var splitPos float32 = 200
 
 var c *cpu.Cpu = cpu.NewCpu()
 
@@ -30,20 +31,11 @@ func loop() {
 
 	curSizeX, _ := g.SingleWindow().CurrentSize()
 	//TODO add Stack
-	hramRows := make([]*g.TableRowWidget, 1)
-	hramRows[0] = g.TableRow(g.Label("Testy"))
+	hramRows := makeHramTableFromSlice(c.Memory.Hram[:])
+	slices.Reverse(hramRows)
+	bank0Rows := makeHexTable(c.Memory.Bank0[:], 0)
+	regColumns := makeRegColumns()
 
-	regColumns := make([]*g.TableColumnWidget, 10)
-	regColumns[0] = g.TableColumn(fmt.Sprintf("PC: 0x%04x", c.PC))
-	regColumns[1] = g.TableColumn(fmt.Sprintf("SP: 0x%04x", c.SP))
-	regColumns[2] = g.TableColumn(fmt.Sprintf("A: 0x%04x", c.A))
-	regColumns[3] = g.TableColumn(fmt.Sprintf("F: 0x%04x", c.F))
-	regColumns[4] = g.TableColumn(fmt.Sprintf("B: 0x%04x", c.B))
-	regColumns[5] = g.TableColumn(fmt.Sprintf("C: 0x%04x", c.C))
-	regColumns[6] = g.TableColumn(fmt.Sprintf("D: 0x%04x", c.D))
-	regColumns[7] = g.TableColumn(fmt.Sprintf("E: 0x%04x", c.E))
-	regColumns[8] = g.TableColumn(fmt.Sprintf("H: 0x%04x", c.H))
-	regColumns[9] = g.TableColumn(fmt.Sprintf("L: 0x%04x", c.L))
 	g.SingleWindow().Layout(
 		g.Row(
 			g.Label("Control: "),
@@ -62,8 +54,8 @@ func loop() {
 			),
 			g.TabBar().TabItems(
 
-				g.TabItem("A").Layout(
-					g.Label("This is first tab"),
+				g.TabItem("Bank0").Layout(
+					g.Table().Flags(0).FastMode(true).Rows(bank0Rows...),
 				),
 				g.TabItem("B").Layout(
 					g.Label("This is second tab"),
@@ -71,19 +63,79 @@ func loop() {
 			),
 		),
 	)
-	//never change split pos
-	splitPos = 300
 
+}
+
+func makeHramTableFromSlice(slice []uint8) []*g.TableRowWidget {
+	rows := make([]*g.TableRowWidget, len(slice))
+	start := 0xff80
+	for i, v := range slice {
+		rows[i] = g.TableRow(g.Labelf("0x%04x:", start), g.Labelf("0x%02x ", v))
+		start++
+	}
+	return rows
+}
+
+func makeHexTable(slice []uint8, add_offset uint32) []*g.TableRowWidget {
+	//TODO row num of table
+	var rowLen int = len(slice) / 16
+	rows := make([]*g.TableRowWidget, rowLen)
+	offset := 0x0000
+	rowInd := 0
+
+	for i := 0; i < len(slice); i += 16 {
+
+		rows[rowInd] = g.TableRow(
+			g.Selectablef("0x%04x: ", offset+int(add_offset)+i),
+			// g.Selectablef("0x%02x ", slice[i+0]).Selected(false).OnClick(OnDClickMemView),
+			g.Selectablef("0x%02x ", slice[i+1]),
+			g.Selectablef("0x%02x ", slice[i+2]),
+			g.Selectablef("0x%02x ", slice[i+3]),
+			g.Selectablef("0x%02x ", slice[i+4]),
+			g.Selectablef("0x%02x ", slice[i+5]),
+			g.Selectablef("0x%02x ", slice[i+6]),
+			g.Selectablef("0x%02x ", slice[i+7]),
+			g.Selectablef("0x%02x ", slice[i+8]),
+			g.Selectablef("0x%02x ", slice[i+9]),
+			g.Selectablef("0x%02x ", slice[i+10]),
+			g.Selectablef("0x%02x ", slice[i+11]),
+			g.Selectablef("0x%02x ", slice[i+12]),
+			g.Selectablef("0x%02x ", slice[i+13]),
+			g.Selectablef("0x%02x ", slice[i+14]),
+			g.Selectablef("0x%02x ", slice[i+15]),
+		)
+
+		rowInd++
+	}
+	return rows
+}
+
+// func OnDClickMemView() {
+// 	c.ToggleBP(slice[i+0])
+// }
+
+func makeRegColumns() []*g.TableColumnWidget {
+	regColumns := make([]*g.TableColumnWidget, 10)
+	regColumns[0] = g.TableColumn(fmt.Sprintf("PC: 0x%04x", c.PC))
+	regColumns[1] = g.TableColumn(fmt.Sprintf("SP: 0x%04x", c.SP))
+	regColumns[2] = g.TableColumn(fmt.Sprintf("A: 0x%02x", c.A))
+	regColumns[3] = g.TableColumn(fmt.Sprintf("F: 0x%02x", c.F))
+	regColumns[4] = g.TableColumn(fmt.Sprintf("B: 0x%02x", c.B))
+	regColumns[5] = g.TableColumn(fmt.Sprintf("C: 0x%02x", c.C))
+	regColumns[6] = g.TableColumn(fmt.Sprintf("D: 0x%02x", c.D))
+	regColumns[7] = g.TableColumn(fmt.Sprintf("E: 0x%02x", c.E))
+	regColumns[8] = g.TableColumn(fmt.Sprintf("H: 0x%02x", c.H))
+	regColumns[9] = g.TableColumn(fmt.Sprintf("L: 0x%02x", c.L))
+	return regColumns
 }
 
 func main() {
 
 	go func() {
-		wnd := g.NewMasterWindow("Hello world", 500, 500, g.MasterWindowFlagsNotResizable)
+		wnd := g.NewMasterWindow("GB Debugger", 800, 800, g.MasterWindowFlagsMaximized)
 		wnd.Run(loop)
 	}()
 	emulate()
-	//app.Main()
 
 }
 

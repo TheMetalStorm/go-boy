@@ -27,17 +27,18 @@ type Cpu struct {
 	SP uint16
 	PC uint16
 
-	memory *Mmap
+	Memory *Mmap
 	//loadedRom          *Rom
 	ranCyclesThisFrame uint64
 
-	Autorun bool
-	DoStep  bool
+	Autorun     bool
+	DoStep      bool
+	breakpoints []uint8
 }
 
 func NewCpu() *Cpu {
 	cpu := Cpu{}
-	cpu.memory = &mmap.Mmap{}
+	cpu.Memory = &mmap.Mmap{}
 	cpu.Autorun = true
 	cpu.DoStep = false
 	return &cpu
@@ -47,15 +48,25 @@ func (c *Cpu) LoadBootRom(r *Rom) {
 	// TODO: different for gbc boot rom?
 	for i := 0; i <= 0xff; i++ {
 		newVal, _ := r.ReadByteAt(uint16(i))
-		c.memory.SetValue(uint16(i), newVal)
+		c.Memory.SetValue(uint16(i), newVal)
 	}
 
+}
+
+func (c *Cpu) ToggleBP(addr uint8) {
+	for i, b := range c.breakpoints {
+		if b == addr {
+			c.breakpoints = append(c.breakpoints[:i], c.breakpoints[i+1:]...)
+			return
+		}
+	}
+	c.breakpoints = append(c.breakpoints, addr)
 }
 
 func (c *Cpu) Step() {
 
 	//fetch Instruction
-	instr, _ := c.memory.ReadByteAt(c.PC)
+	instr, _ := c.Memory.ReadByteAt(c.PC)
 	c.ranCyclesThisFrame += 4 //instr fetch (and decode i guess) takes 4 (machine?) cycles
 	//decode/Execute
 	c.ranCyclesThisFrame += c.decodeExecute(instr)
@@ -111,10 +122,10 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0xc9:
 		//TODO
 
-		readLow, _ := c.memory.ReadByteAt(c.SP)
+		readLow, _ := c.Memory.ReadByteAt(c.SP)
 		c.SP++
 
-		readHigh, _ := c.memory.ReadByteAt(c.SP)
+		readHigh, _ := c.Memory.ReadByteAt(c.SP)
 		c.SP++
 		newPC := (uint16(readLow) | uint16(readHigh)<<8)
 		fmt.Printf("RETURN: going from %04x to %04x\n", c.PC, newPC)
@@ -169,7 +180,7 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	// set ie
 	case 0xfb:
 		c.PC++
-		c.memory.Io.SetIE(1)
+		c.Memory.Io.SetIE(1)
 		return 1
 
 	//RLA
@@ -207,7 +218,7 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 
 func (c *Cpu) handleCB() (cycles uint64) {
 	c.PC++
-	instr, numReadBytes := c.memory.ReadByteAt(c.PC)
+	instr, numReadBytes := c.Memory.ReadByteAt(c.PC)
 	c.PC += numReadBytes
 	fmt.Printf("-> cb%02x\n", instr)
 
@@ -276,11 +287,11 @@ func isHalfCarryFlagAddition(valA int, valB int, result int) bool {
 func (c *Cpu) pop16(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles uint64) {
 	c.PC++
 
-	readLow, _ := c.memory.ReadByteAt(c.SP)
+	readLow, _ := c.Memory.ReadByteAt(c.SP)
 	*lowerRegPtr = readLow
 	c.SP++
 
-	readHigh, _ := c.memory.ReadByteAt(c.SP)
+	readHigh, _ := c.Memory.ReadByteAt(c.SP)
 	*higherRegPtr = readHigh
 	c.SP++
 
@@ -292,10 +303,10 @@ func (c *Cpu) push16(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles uint64) {
 	c.PC++
 
 	c.SP--
-	c.memory.SetValue(c.SP, *higherRegPtr)
+	c.Memory.SetValue(c.SP, *higherRegPtr)
 	c.SP--
-	c.memory.SetValue(c.SP, *lowerRegPtr)
-
+	c.Memory.SetValue(c.SP, *lowerRegPtr)
+	c.br()
 	return 4
 }
 
@@ -310,16 +321,16 @@ func (c *Cpu) storeValInReg(regPtr *uint8, val uint8) (cycles uint64) {
 func (c *Cpu) call16Imm() (cycles uint64) {
 
 	c.PC++
-	newPCAddr, bytesRead := c.memory.Read16At(c.PC)
+	newPCAddr, bytesRead := c.Memory.Read16At(c.PC)
 	c.PC += bytesRead
 
 	// With the push, the current value of SP is decremented by 1, and the higher-order byte of PC is loaded in the
 	// memory address specified by the new SP value. The value of SP is then decremented by 1 again, and the lower-order
 	//byte of PC is loaded in the memory address specified by that value of SP.
 	c.SP--
-	c.memory.SetValue(c.SP, getHigher(c.PC))
+	c.Memory.SetValue(c.SP, getHigher(c.PC))
 	c.SP--
-	c.memory.SetValue(c.SP, getLower(c.PC)) // lower order byte of PC
+	c.Memory.SetValue(c.SP, getLower(c.PC)) // lower order byte of PC
 
 	fmt.Printf("CALL: going from %04x ", c.PC)
 
@@ -332,15 +343,15 @@ func (c *Cpu) call16Imm() (cycles uint64) {
 	// The lower-order byte of a16 is placed in byte 2 of the object code, and the higher-order byte is placed in byte 3.
 	newPCAddrHigher := getHigher(c.PC)
 	newPCAddrLower := getLower(c.PC)
-	c.memory.Oam[2] = newPCAddrLower
-	c.memory.Oam[3] = newPCAddrHigher
+	c.Memory.Oam[2] = newPCAddrLower
+	c.Memory.Oam[3] = newPCAddrHigher
 
 	return 6
 }
 
 func (c *Cpu) storeMemInReg(address uint16, regPtr *uint8) (cycles uint64) {
 
-	val, bytesRead := c.memory.ReadByteAt(address)
+	val, bytesRead := c.Memory.ReadByteAt(address)
 	c.PC += bytesRead
 
 	*regPtr = val
@@ -350,9 +361,9 @@ func (c *Cpu) storeMemInReg(address uint16, regPtr *uint8) (cycles uint64) {
 
 func (c *Cpu) storeRegInImmMemAddr(val uint8) (cycles uint64) {
 	c.PC++
-	a8, bytesRead := c.memory.ReadByteAt(c.PC)
+	a8, bytesRead := c.Memory.ReadByteAt(c.PC)
 	c.PC += bytesRead
-	c.memory.SetValue(IO_START_ADDR+uint16(a8), val)
+	c.Memory.SetValue(IO_START_ADDR+uint16(a8), val)
 	return 3
 }
 
@@ -363,7 +374,7 @@ func (c *Cpu) jumpRelIf(cond bool) (cycles uint64) {
 		var data byte
 		var bytesRead uint16
 
-		data, bytesRead = c.memory.ReadByteAt(c.PC)
+		data, bytesRead = c.Memory.ReadByteAt(c.PC)
 
 		signedData := int8(data)
 
@@ -418,13 +429,13 @@ func (c *Cpu) incrementReg16(reg Reg16) (cycles uint64) {
 }
 
 func (c *Cpu) jump() (cycles uint64) {
-	c.PC, _ = c.memory.Read16At(c.PC + 1)
+	c.PC, _ = c.Memory.Read16At(c.PC + 1)
 	return 4
 }
 
 func (c *Cpu) storeRegInMemAddr(address uint16, toStore uint8) (cycles uint64) {
 
-	c.memory.SetValue(address, toStore)
+	c.Memory.SetValue(address, toStore)
 
 	c.PC++
 	return 2
@@ -434,7 +445,7 @@ func (c *Cpu) loadImm8Reg(regPtr *uint8) (cycles uint64) {
 	var skip uint16
 	var val uint8
 	c.PC++
-	val, skip = c.memory.ReadByteAt(c.PC)
+	val, skip = c.Memory.ReadByteAt(c.PC)
 	c.PC += skip
 
 	*regPtr = val
@@ -447,7 +458,7 @@ func (c *Cpu) loadImm16Reg(reg *uint16) (cycles uint64) {
 	var val uint16
 
 	c.PC++
-	val, skip = c.memory.Read16At(c.PC)
+	val, skip = c.Memory.Read16At(c.PC)
 	c.PC += skip
 	*reg = val
 
@@ -460,7 +471,7 @@ func (c *Cpu) loadImm16Reg2Ptr(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles 
 	var val uint16
 
 	c.PC++
-	val, skip = c.memory.Read16At(c.PC)
+	val, skip = c.Memory.Read16At(c.PC)
 	c.PC += skip
 
 	*higherRegPtr = getHigher(val)
@@ -493,7 +504,7 @@ func getLower(orig uint16) uint8 {
 }
 func (c *Cpu) br() {
 	c.DumpRegs()
-	c.memory.DumpHram()
+	c.Memory.DumpHram()
 	c.Autorun = false
 }
 

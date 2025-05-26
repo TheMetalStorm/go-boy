@@ -21,7 +21,7 @@ type Mmap struct {
 	Oam  [0xa0]uint8 //Object attribute memory (OAM)
 	Nu   [0x60]uint8 //not usable
 	Io   Ioregs      // I/O Reg
-	Hram [0x7e]uint8 //high ram
+	Hram [0x7f]uint8 //high ram
 	Ie   uint8       //interruot enable reg
 }
 
