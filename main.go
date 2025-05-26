@@ -1,16 +1,16 @@
 package main
 
 import (
+	"fmt"
 	"go-boy/cpu"
 	"go-boy/rom"
-	"go-boy/widgets"
 
-	//"gioui.org/app"
 	g "github.com/AllenDang/giu"
 )
 
 type Cpu = cpu.Cpu
-type Split = widgets.Split
+
+var splitPos float32 = 300
 
 var c *cpu.Cpu = cpu.NewCpu()
 
@@ -27,14 +27,53 @@ func onStepButton() {
 }
 
 func loop() {
+
+	curSizeX, _ := g.SingleWindow().CurrentSize()
+	//TODO add Stack
+	hramRows := make([]*g.TableRowWidget, 1)
+	hramRows[0] = g.TableRow(g.Label("Testy"))
+
+	regColumns := make([]*g.TableColumnWidget, 10)
+	regColumns[0] = g.TableColumn(fmt.Sprintf("PC: 0x%04x", c.PC))
+	regColumns[1] = g.TableColumn(fmt.Sprintf("SP: 0x%04x", c.SP))
+	regColumns[2] = g.TableColumn(fmt.Sprintf("A: 0x%04x", c.A))
+	regColumns[3] = g.TableColumn(fmt.Sprintf("F: 0x%04x", c.F))
+	regColumns[4] = g.TableColumn(fmt.Sprintf("B: 0x%04x", c.B))
+	regColumns[5] = g.TableColumn(fmt.Sprintf("C: 0x%04x", c.C))
+	regColumns[6] = g.TableColumn(fmt.Sprintf("D: 0x%04x", c.D))
+	regColumns[7] = g.TableColumn(fmt.Sprintf("E: 0x%04x", c.E))
+	regColumns[8] = g.TableColumn(fmt.Sprintf("H: 0x%04x", c.H))
+	regColumns[9] = g.TableColumn(fmt.Sprintf("L: 0x%04x", c.L))
 	g.SingleWindow().Layout(
 		g.Row(
-			g.Labelf("0x%04x", c.PC),
+			g.Label("Control: "),
 			g.Button("Start").OnClick(onStartButton),
 			g.Button("Stop").OnClick(onStopButton),
 			g.Button("Step").OnClick(onStepButton),
 		),
+		g.Row(
+			g.Label("Regs: "),
+			g.Table().FastMode(true).Columns(regColumns...).Size(curSizeX, 20),
+		),
+		g.SplitLayout(g.DirectionVertical, &splitPos,
+			g.Column(
+				g.Label("Stack: "),
+				g.Table().FastMode(true).Rows(hramRows...),
+			),
+			g.TabBar().TabItems(
+
+				g.TabItem("A").Layout(
+					g.Label("This is first tab"),
+				),
+				g.TabItem("B").Layout(
+					g.Label("This is second tab"),
+				),
+			),
+		),
 	)
+	//never change split pos
+	splitPos = 300
+
 }
 
 func main() {
