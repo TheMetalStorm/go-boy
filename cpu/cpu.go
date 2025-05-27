@@ -5,6 +5,7 @@ import (
 	"go-boy/mmap"
 	"go-boy/rom"
 	"os"
+	"slices"
 )
 
 type Rom = rom.Rom
@@ -31,9 +32,14 @@ type Cpu struct {
 	//loadedRom          *Rom
 	ranCyclesThisFrame uint64
 
+	//Refactor into debugger struct
 	Autorun     bool
 	DoStep      bool
-	breakpoints []uint8
+	breakpoints []uint16
+	LastBPHit   int
+
+	currentGame    *Rom
+	currentBootrom *Rom
 }
 
 func NewCpu() *Cpu {
@@ -41,7 +47,32 @@ func NewCpu() *Cpu {
 	cpu.Memory = &mmap.Mmap{}
 	cpu.Autorun = true
 	cpu.DoStep = false
+	cpu.LastBPHit = -1
 	return &cpu
+}
+func (cpu *Cpu) Restart() {
+	cpu.A = 0
+	cpu.F = 0
+	cpu.B = 0
+	cpu.C = 0
+	cpu.D = 0
+	cpu.E = 0
+	cpu.H = 0
+	cpu.L = 0
+	cpu.SP = 0
+	cpu.PC = 0
+	cpu.Memory = &mmap.Mmap{}
+	cpu.ranCyclesThisFrame = 0
+	cpu.Autorun = false
+	cpu.DoStep = false
+	cpu.LastBPHit = -1
+
+	//for Testing
+	cpu.currentBootrom = rom.NewRom("./bootroms/dmg_boot.bin")
+	cpu.LoadBootRom(cpu.currentBootrom)
+	cpu.currentGame = rom.NewRom("./games/tetris.gb")
+	cpu.LoadRom(cpu.currentGame)
+
 }
 
 func (c *Cpu) LoadBootRom(r *Rom) {
@@ -53,7 +84,27 @@ func (c *Cpu) LoadBootRom(r *Rom) {
 
 }
 
-func (c *Cpu) ToggleBP(addr uint8) {
+func (c *Cpu) LoadRom(r *Rom) {
+	// TODO: for now only fills bank 0
+	for i := 0x100; i <= 0x3fff; i++ {
+		newVal, _ := r.ReadByteAt(uint16(i))
+		c.Memory.SetValue(uint16(i), newVal)
+	}
+}
+
+func (c *Cpu) UnloadBootrom(r *Rom) {
+	for i := 0; i < 0x100; i++ {
+		newVal, _ := r.ReadByteAt(uint16(i))
+		c.Memory.SetValue(uint16(i), newVal)
+	}
+
+}
+
+func (c *Cpu) ToggleBP(addr uint16) {
+	//No point in setting BP on Mem Adress 0
+	if addr == 0 {
+		return
+	}
 	for i, b := range c.breakpoints {
 		if b == addr {
 			c.breakpoints = append(c.breakpoints[:i], c.breakpoints[i+1:]...)
@@ -61,6 +112,29 @@ func (c *Cpu) ToggleBP(addr uint8) {
 		}
 	}
 	c.breakpoints = append(c.breakpoints, addr)
+}
+
+func (c *Cpu) Run() {
+	for {
+		//NOTE: HARDCODED FOR DMG BOOT ROM
+		if c.PC == 0x100 {
+			//unmap boot rom
+			c.UnloadBootrom(c.currentGame)
+		}
+		if c.Autorun {
+			if slices.Contains(c.GetBreakpoints(), c.PC) && c.PC != uint16(c.LastBPHit) {
+				c.Autorun = false
+				c.LastBPHit = int(c.PC)
+			} else {
+				c.Step()
+			}
+		} else {
+			if c.DoStep {
+				c.Step()
+				c.DoStep = false
+			}
+		}
+	}
 }
 
 func (c *Cpu) Step() {
@@ -74,8 +148,8 @@ func (c *Cpu) Step() {
 
 // returns machine cycles it took to execute
 func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
-	fmt.Printf("Instr %02x\n", instr)
 
+	fmt.Printf("Instr 0x%02x\n", instr)
 	switch instr {
 
 	//cb
@@ -128,7 +202,6 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		readHigh, _ := c.Memory.ReadByteAt(c.SP)
 		c.SP++
 		newPC := (uint16(readLow) | uint16(readHigh)<<8)
-		fmt.Printf("RETURN: going from %04x to %04x\n", c.PC, newPC)
 
 		c.PC = newPC
 
@@ -217,10 +290,12 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 }
 
 func (c *Cpu) handleCB() (cycles uint64) {
+
 	c.PC++
 	instr, numReadBytes := c.Memory.ReadByteAt(c.PC)
 	c.PC += numReadBytes
-	fmt.Printf("-> cb%02x\n", instr)
+
+	fmt.Printf("-> 0xcb%02x\n", instr)
 
 	switch instr {
 	case 0x7c:
@@ -306,7 +381,6 @@ func (c *Cpu) push16(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles uint64) {
 	c.Memory.SetValue(c.SP, *higherRegPtr)
 	c.SP--
 	c.Memory.SetValue(c.SP, *lowerRegPtr)
-	c.br()
 	return 4
 }
 
@@ -332,12 +406,9 @@ func (c *Cpu) call16Imm() (cycles uint64) {
 	c.SP--
 	c.Memory.SetValue(c.SP, getLower(c.PC)) // lower order byte of PC
 
-	fmt.Printf("CALL: going from %04x ", c.PC)
-
 	//The subroutine is placed after the location specified by the new PC value. When the subroutine finishes, control is
 	//returned to the source program using a return instruction and by popping the starting address of the next
 	//instruction (which was just pushed) and moving it to the PC.
-	fmt.Printf("to %04x\n", newPCAddr)
 
 	c.PC = newPCAddr
 	// The lower-order byte of a16 is placed in byte 2 of the object code, and the higher-order byte is placed in byte 3.
@@ -378,7 +449,6 @@ func (c *Cpu) jumpRelIf(cond bool) (cycles uint64) {
 
 		signedData := int8(data)
 
-		fmt.Printf("Jump From %04x to %04x (2 + read data %04x )\n", c.PC-1, c.PC+bytesRead+uint16(signedData), int16(signedData))
 		c.PC += bytesRead + uint16(signedData)
 		return 3
 	}
@@ -610,4 +680,8 @@ func (c *Cpu) SetCarryFlag(cond bool) { // c
 	} else {
 		c.SetAF(c.GetAF() &^ (1 << 4))
 	}
+}
+
+func (c *Cpu) GetBreakpoints() []uint16 {
+	return c.breakpoints
 }

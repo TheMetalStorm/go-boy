@@ -10,6 +10,10 @@ type Rom struct {
 	data []byte
 }
 
+func (r *Rom) GetLength() int {
+	return len(r.data)
+}
+
 func NewRom(path string) *Rom {
 	file, err := os.Open(path)
 	if err != nil {

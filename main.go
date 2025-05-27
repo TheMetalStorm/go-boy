@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"go-boy/cpu"
-	"go-boy/rom"
+	"image/color"
 	"slices"
 
 	g "github.com/AllenDang/giu"
@@ -27,13 +27,17 @@ func onStepButton() {
 	c.DoStep = true
 }
 
+func onRestartButton() {
+	c.Restart()
+}
+
 func loop() {
 
 	curSizeX, _ := g.SingleWindow().CurrentSize()
 	//TODO add Stack
 	hramRows := makeHramTableFromSlice(c.Memory.Hram[:])
 	slices.Reverse(hramRows)
-	bank0Rows := makeHexTable(c.Memory.Bank0[:], 0)
+	bank0Rows := makeHexTableRowsDebuggable(c.Memory.Bank0[:], 0)
 	regColumns := makeRegColumns()
 
 	g.SingleWindow().Layout(
@@ -42,6 +46,7 @@ func loop() {
 			g.Button("Start").OnClick(onStartButton),
 			g.Button("Stop").OnClick(onStopButton),
 			g.Button("Step").OnClick(onStepButton),
+			g.Button("Restart Machine").OnClick(onRestartButton),
 		),
 		g.Row(
 			g.Label("Regs: "),
@@ -55,7 +60,7 @@ func loop() {
 			g.TabBar().TabItems(
 
 				g.TabItem("Bank0").Layout(
-					g.Table().Flags(0).FastMode(true).Rows(bank0Rows...),
+					g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(bank0Rows...),
 				),
 				g.TabItem("B").Layout(
 					g.Label("This is second tab"),
@@ -76,43 +81,106 @@ func makeHramTableFromSlice(slice []uint8) []*g.TableRowWidget {
 	return rows
 }
 
-func makeHexTable(slice []uint8, add_offset uint32) []*g.TableRowWidget {
-	//TODO row num of table
+func makeHexTableRows(slice []uint8, regionOffset uint32) []*g.TableRowWidget {
 	var rowLen int = len(slice) / 16
 	rows := make([]*g.TableRowWidget, rowLen)
-	offset := 0x0000
 	rowInd := 0
 
-	for i := 0; i < len(slice); i += 16 {
-
+	for hexOffset := 0; hexOffset < len(slice); hexOffset += 16 {
 		rows[rowInd] = g.TableRow(
-			g.Selectablef("0x%04x: ", offset+int(add_offset)+i),
-			// g.Selectablef("0x%02x ", slice[i+0]).Selected(false).OnClick(OnDClickMemView),
-			g.Selectablef("0x%02x ", slice[i+1]),
-			g.Selectablef("0x%02x ", slice[i+2]),
-			g.Selectablef("0x%02x ", slice[i+3]),
-			g.Selectablef("0x%02x ", slice[i+4]),
-			g.Selectablef("0x%02x ", slice[i+5]),
-			g.Selectablef("0x%02x ", slice[i+6]),
-			g.Selectablef("0x%02x ", slice[i+7]),
-			g.Selectablef("0x%02x ", slice[i+8]),
-			g.Selectablef("0x%02x ", slice[i+9]),
-			g.Selectablef("0x%02x ", slice[i+10]),
-			g.Selectablef("0x%02x ", slice[i+11]),
-			g.Selectablef("0x%02x ", slice[i+12]),
-			g.Selectablef("0x%02x ", slice[i+13]),
-			g.Selectablef("0x%02x ", slice[i+14]),
-			g.Selectablef("0x%02x ", slice[i+15]),
+			g.Selectablef("0x%04x: ", int(regionOffset)+hexOffset),
+			makeHexRowCell(slice, regionOffset, hexOffset, 0),
+			makeHexRowCell(slice, regionOffset, hexOffset, 1),
+			makeHexRowCell(slice, regionOffset, hexOffset, 2),
+			makeHexRowCell(slice, regionOffset, hexOffset, 3),
+			makeHexRowCell(slice, regionOffset, hexOffset, 4),
+			makeHexRowCell(slice, regionOffset, hexOffset, 5),
+			makeHexRowCell(slice, regionOffset, hexOffset, 6),
+			makeHexRowCell(slice, regionOffset, hexOffset, 7),
+			makeHexRowCell(slice, regionOffset, hexOffset, 8),
+			makeHexRowCell(slice, regionOffset, hexOffset, 9),
+			makeHexRowCell(slice, regionOffset, hexOffset, 10),
+			makeHexRowCell(slice, regionOffset, hexOffset, 11),
+			makeHexRowCell(slice, regionOffset, hexOffset, 12),
+			makeHexRowCell(slice, regionOffset, hexOffset, 13),
+			makeHexRowCell(slice, regionOffset, hexOffset, 14),
+			makeHexRowCell(slice, regionOffset, hexOffset, 15),
 		)
-
 		rowInd++
 	}
 	return rows
 }
 
-// func OnDClickMemView() {
-// 	c.ToggleBP(slice[i+0])
-// }
+func makeHexTableRowsDebuggable(slice []uint8, regionOffset uint32) []*g.TableRowWidget {
+	var rowLen int = len(slice) / 16
+	rows := make([]*g.TableRowWidget, rowLen)
+	rowInd := 0
+
+	for hexOffset := 0; hexOffset < len(slice); hexOffset += 16 {
+		rows[rowInd] = g.TableRow(
+			g.Selectablef("0x%04x: ", int(regionOffset)+hexOffset),
+			makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 0),
+			makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 1),
+			makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 2),
+			makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 3),
+			makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 4),
+			makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 5),
+			makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 6),
+			makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 7),
+			makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 8),
+			makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 9),
+			makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 10),
+			makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 11),
+			makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 12),
+			makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 13),
+			makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 14),
+			makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 15),
+		)
+		rowInd++
+	}
+	return rows
+}
+
+func makeHexRowCell(slice []uint8, regionOffset uint32, hexOffset int, rowOffset int) g.Widget {
+
+	return g.Selectablef("0x%02x ", slice[hexOffset+rowOffset])
+
+}
+
+func makeHexRowCellDebugabble(slice []uint8, regionOffset uint32, hexOffset int, rowOffset int) g.Widget {
+	globalAddr := uint16(regionOffset) + uint16(hexOffset) + uint16(rowOffset)
+
+	style := g.Style()
+	if isInDebug(c.GetBreakpoints(), globalAddr) {
+		style.SetColor(g.StyleColorButton, color.RGBA{0x00, 0xbb, 0xaa, 0xff})
+
+	}
+	if isCurrentPC(c.PC, globalAddr) {
+		style.SetColor(g.StyleColorText, color.RGBA{0x00, 0xff, 0x00, 0xff})
+
+	}
+	style.SetStyle(g.StyleVarFrameBorderSize, 0, 0)
+	style.SetColor(g.StyleColorButtonHovered, color.RGBA{0x00, 0xff, 0x00, 0x00})
+	style.SetColor(g.StyleColorButtonActive, color.RGBA{0x00, 0xff, 0x00, 0x00})
+
+	button := g.Buttonf("0x%02x ", slice[hexOffset+rowOffset]).OnClick(OnClickMemView(globalAddr))
+	return style.To(button)
+
+}
+
+func isCurrentPC(pc uint16, addr uint16) bool {
+	return pc == addr
+}
+
+func isInDebug(breakpoints []uint16, addr uint16) bool {
+	return slices.Contains(breakpoints, addr)
+}
+
+func OnClickMemView(addr uint16) func() {
+	return func() {
+		c.ToggleBP(addr)
+	}
+}
 
 func makeRegColumns() []*g.TableColumnWidget {
 	regColumns := make([]*g.TableColumnWidget, 10)
@@ -141,144 +209,7 @@ func main() {
 
 func emulate() {
 
-	//toLoad := rom.NewRom("./games/Tetris.gb")
-	bootrom := rom.NewRom("./bootroms/dmg_boot.bin")
-
-	c.LoadBootRom(bootrom)
-	// cpu.PatchBootRom(bootrom)
+	c.Restart()
 	c.Autorun = false
-
-	for {
-		if c.Autorun {
-			c.Step()
-		} else {
-			if c.DoStep {
-				c.Step()
-				c.DoStep = false
-			}
-		}
-	}
-
+	c.Run()
 }
-
-// func run(window *app.Window) error {
-// 	window.Option(app.Size(unit.Dp(400), unit.Dp(600)))
-
-// 	theme := material.NewTheme()
-// 	var ops op.Ops
-// 	var runButton widget.Clickable
-// 	var stopButton widget.Clickable
-// 	var stepButton widget.Clickable
-// 	var regListState widget.List
-// 	regListState.Axis = layout.Vertical
-
-// 	var split Split
-// 	split.MaxHeight = unit.Dp(200)
-// 	stepClickedNow := false
-
-// 	column := layout.Flex{
-// 		Axis:    layout.Horizontal,
-// 		Spacing: layout.SpaceEvenly,
-// 	}
-// 	for {
-
-// 		switch e := window.Event().(type) {
-// 		case app.DestroyEvent:
-// 			return e.Err
-// 		case app.FrameEvent:
-// 			gtx := app.NewContext(&ops, e)
-// 			// Let's try out the flexbox layout:
-// 			layout.Flex{
-// 				// Vertical alignment, from top to bottom
-// 				Axis: layout.Vertical,
-// 				// Empty space is left at the start, i.e. at the top
-// 				Spacing: layout.SpaceStart,
-// 			}.Layout(gtx,
-// 				layout.Rigid(
-// 					func(gtx layout.Context) layout.Dimensions {
-// 						list := [10]string{}
-// 						list[0] = fmt.Sprintf("Reg A: 0x%04x", c.A)
-// 						list[1] = fmt.Sprintf("Reg F: 0x%04x (0b%08b)", c.F, c.F)
-// 						list[2] = fmt.Sprintf("Reg B: 0x%04x", c.B)
-// 						list[3] = fmt.Sprintf("Reg C: 0x%04x", c.C)
-// 						list[4] = fmt.Sprintf("Reg D: 0x%04x", c.D)
-// 						list[5] = fmt.Sprintf("Reg E: 0x%04x", c.E)
-// 						list[6] = fmt.Sprintf("Reg H: 0x%04x", c.H)
-// 						list[7] = fmt.Sprintf("Reg L: 0x%04x", c.L)
-// 						list[8] = fmt.Sprintf("SP: 0x%04x", c.SP)
-// 						list[9] = fmt.Sprintf("PC: 0x%04x", c.PC)
-
-// 						return material.List(theme, &regListState).Layout(gtx, 10, func(gtx layout.Context, index int) layout.Dimensions {
-// 							return layout.Stack{}.Layout(gtx,
-// 								layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-
-// 									return layout.UniformInset(unit.Dp(8)).Layout(gtx, material.Body1(theme, list[index]).Layout)
-// 								}),
-// 							)
-// 						})
-// 					},
-// 				),
-
-// 				layout.Rigid(
-// 					func(gtx layout.Context) layout.Dimensions {
-
-// 						return split.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-// 							a := material.H1(theme, "Hello")
-// 							return a.Layout(gtx)
-// 						}, func(gtx layout.Context) layout.Dimensions {
-// 							a := material.H1(theme, "World")
-// 							return a.Layout(gtx)
-// 						})
-// 					},
-// 				),
-// 				layout.Rigid(
-// 					func(gtx layout.Context) layout.Dimensions {
-// 						return column.Layout(gtx,
-// 							layout.Rigid(
-// 								func(gtx layout.Context) layout.Dimensions {
-// 									btn := material.Button(theme, &runButton, "Start")
-// 									return btn.Layout(gtx)
-// 								},
-// 							),
-// 							layout.Rigid(
-// 								func(gtx layout.Context) layout.Dimensions {
-// 									btn := material.Button(theme, &stepButton, "Step")
-// 									return btn.Layout(gtx)
-// 								},
-// 							),
-// 							layout.Rigid(
-// 								func(gtx layout.Context) layout.Dimensions {
-// 									btn := material.Button(theme, &stopButton, "Stop")
-// 									return btn.Layout(gtx)
-// 								},
-// 							),
-// 						)
-// 					},
-// 				),
-
-// 				// ... then one to hold an empty spacer
-// 				layout.Rigid(
-// 					// The height of the spacer is 25 Device independent pixels
-// 					layout.Spacer{Height: unit.Dp(25)}.Layout,
-// 				),
-// 			)
-
-// 			if stepButton.Pressed() && !stepClickedNow {
-// 				c.DoStep = true
-// 				stepClickedNow = true
-// 			} else if !stepButton.Pressed() {
-// 				stepClickedNow = false
-// 			}
-
-// 			if runButton.Pressed() {
-// 				c.Autorun = true
-// 			}
-// 			if stopButton.Pressed() {
-// 				c.Autorun = false
-// 			}
-// 			e.Frame(gtx.Ops)
-
-// 		}
-
-// 	}
-// }
