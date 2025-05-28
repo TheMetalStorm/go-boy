@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"go-boy/mmap"
 	"go-boy/rom"
-	"os"
 	"slices"
 )
 
@@ -28,18 +27,18 @@ type Cpu struct {
 	SP uint16
 	PC uint16
 
-	Memory *Mmap
-	//loadedRom          *Rom
+	Memory             *Mmap
 	ranCyclesThisFrame uint64
 
+	currentGame    *Rom
+	currentBootrom *Rom
+
+	Halt bool
 	//Refactor into debugger struct
 	Autorun     bool
 	DoStep      bool
 	breakpoints []uint16
 	LastBPHit   int
-
-	currentGame    *Rom
-	currentBootrom *Rom
 }
 
 func NewCpu() *Cpu {
@@ -48,6 +47,8 @@ func NewCpu() *Cpu {
 	cpu.Autorun = true
 	cpu.DoStep = false
 	cpu.LastBPHit = -1
+	cpu.Halt = false
+
 	return &cpu
 }
 func (cpu *Cpu) Restart() {
@@ -66,6 +67,7 @@ func (cpu *Cpu) Restart() {
 	cpu.Autorun = false
 	cpu.DoStep = false
 	cpu.LastBPHit = -1
+	cpu.Halt = false
 
 	//for Testing
 	cpu.currentBootrom = rom.NewRom("./bootroms/dmg_boot.bin")
@@ -115,7 +117,11 @@ func (c *Cpu) ToggleBP(addr uint16) {
 }
 
 func (c *Cpu) Run() {
+
 	for {
+		if c.Halt {
+			continue
+		}
 		//NOTE: HARDCODED FOR DMG BOOT ROM
 		if c.PC == 0x100 {
 			//unmap boot rom
@@ -139,6 +145,8 @@ func (c *Cpu) Run() {
 
 func (c *Cpu) Step() {
 
+	//if we step, we should be able to trigger on the same BP again (loop), so we clear here
+	c.LastBPHit = -1
 	//fetch Instruction
 	instr, _ := c.Memory.ReadByteAt(c.PC)
 	c.ranCyclesThisFrame += 4 //instr fetch (and decode i guess) takes 4 (machine?) cycles
@@ -149,7 +157,6 @@ func (c *Cpu) Step() {
 // returns machine cycles it took to execute
 func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 
-	fmt.Printf("Instr 0x%02x\n", instr)
 	switch instr {
 
 	//cb
@@ -194,7 +201,6 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return c.call16Imm()
 	//ret
 	case 0xc9:
-		//TODO
 
 		readLow, _ := c.Memory.ReadByteAt(c.SP)
 		c.SP++
@@ -280,12 +286,10 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 
 		return 1
 	default:
-		fmt.Printf("ERROR: 0x%02x is not a recognized instruction!\n", instr)
-		fmt.Println("-----------------------------------------------------------------")
-		c.DumpRegs()
-		fmt.Println("-----------------------------------------------------------------")
-		os.Exit(1)
+		fmt.Printf("ERROR at PC 0x%04x: 0x%02x is not a recognized instruction!\n", c.PC, instr)
+		c.Halt = true
 		return 0
+
 	}
 }
 
@@ -295,8 +299,6 @@ func (c *Cpu) handleCB() (cycles uint64) {
 	instr, numReadBytes := c.Memory.ReadByteAt(c.PC)
 	c.PC += numReadBytes
 
-	fmt.Printf("-> 0xcb%02x\n", instr)
-
 	switch instr {
 	case 0x7c:
 		return c.cbSetZeroToComplementRegBit(&c.H, 7)
@@ -304,13 +306,9 @@ func (c *Cpu) handleCB() (cycles uint64) {
 		return c.cbRegRotateLeft(&c.C)
 	default:
 		c.PC -= 2
-		fmt.Printf("ERROR: 0xcb%02x is not a recognized instruction!\n", instr)
-		fmt.Println("-----------------------------------------------------------------")
-		c.DumpRegs()
-		fmt.Println("-----------------------------------------------------------------")
-		os.Exit(1)
+		fmt.Printf("ERROR at PC 0x%04x: 0xcb%02x is not a recognized instruction!\n", c.PC, instr)
+		c.Halt = true
 		return 0
-
 	}
 }
 
@@ -350,13 +348,20 @@ func (c *Cpu) cbSetZeroToComplementRegBit(regPtr *uint8, bitPos int) uint64 {
 	return 2
 }
 
-func isHalfCarryFlagSubtraction(valA uint8, valB uint8, result uint8) bool {
+func isHalfCarryFlagSubtraction(valA uint8, valB uint8) bool {
 
-	return (valA^(-valB)^result)&0x10 != 0
+	lowerA := getLower4(valA)
+	lowerB := getLower4(valB)
+
+	return lowerB > lowerA
 }
 
-func isHalfCarryFlagAddition(valA int, valB int, result int) bool {
-	return (valA^valB^result)&0x10 != 0
+func isHalfCarryFlagAddition(valA uint8, valB uint8) bool {
+
+	lowerA := getLower4(valA)
+	lowerB := getLower4(valB)
+
+	return (lowerA + lowerB) > 0xF
 }
 
 func (c *Cpu) pop16(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles uint64) {
@@ -402,9 +407,9 @@ func (c *Cpu) call16Imm() (cycles uint64) {
 	// memory address specified by the new SP value. The value of SP is then decremented by 1 again, and the lower-order
 	//byte of PC is loaded in the memory address specified by that value of SP.
 	c.SP--
-	c.Memory.SetValue(c.SP, getHigher(c.PC))
+	c.Memory.SetValue(c.SP, getHigher8(c.PC))
 	c.SP--
-	c.Memory.SetValue(c.SP, getLower(c.PC)) // lower order byte of PC
+	c.Memory.SetValue(c.SP, getLower8(c.PC)) // lower order byte of PC
 
 	//The subroutine is placed after the location specified by the new PC value. When the subroutine finishes, control is
 	//returned to the source program using a return instruction and by popping the starting address of the next
@@ -412,8 +417,8 @@ func (c *Cpu) call16Imm() (cycles uint64) {
 
 	c.PC = newPCAddr
 	// The lower-order byte of a16 is placed in byte 2 of the object code, and the higher-order byte is placed in byte 3.
-	newPCAddrHigher := getHigher(c.PC)
-	newPCAddrLower := getLower(c.PC)
+	newPCAddrHigher := getHigher8(c.PC)
+	newPCAddrLower := getLower8(c.PC)
 	c.Memory.Oam[2] = newPCAddrLower
 	c.Memory.Oam[3] = newPCAddrHigher
 
@@ -440,16 +445,12 @@ func (c *Cpu) storeRegInImmMemAddr(val uint8) (cycles uint64) {
 
 func (c *Cpu) jumpRelIf(cond bool) (cycles uint64) {
 	c.PC++
-
+	data, bytesRead := c.Memory.ReadByteAt(c.PC)
+	c.PC += bytesRead
 	if cond {
-		var data byte
-		var bytesRead uint16
-
-		data, bytesRead = c.Memory.ReadByteAt(c.PC)
-
 		signedData := int8(data)
 
-		c.PC += bytesRead + uint16(signedData)
+		c.PC += uint16(signedData)
 		return 3
 	}
 	return 2
@@ -462,7 +463,7 @@ func (c *Cpu) decrementReg8(regPtr *uint8) (cycles uint64) {
 
 	c.SetZeroFlag(*regPtr == 0)
 	c.SetSubFlag(true)
-	c.SetHalfCarryFlag(isHalfCarryFlagSubtraction(oldRegVal, 1, *regPtr))
+	c.SetHalfCarryFlag(isHalfCarryFlagSubtraction(oldRegVal, 1))
 
 	c.PC++
 	return 1
@@ -474,7 +475,7 @@ func (c *Cpu) incrementReg8(regPtr *uint8) (cycles uint64) {
 
 	c.SetZeroFlag(*regPtr == 0)
 	c.SetSubFlag(false)
-	c.SetHalfCarryFlag(isHalfCarryFlagAddition(int(oldRegVal), 1, int(*regPtr)))
+	c.SetHalfCarryFlag(isHalfCarryFlagAddition(oldRegVal, 1))
 
 	c.PC++
 	return 1
@@ -544,8 +545,8 @@ func (c *Cpu) loadImm16Reg2Ptr(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles 
 	val, skip = c.Memory.Read16At(c.PC)
 	c.PC += skip
 
-	*higherRegPtr = getHigher(val)
-	*lowerRegPtr = getLower(val)
+	*higherRegPtr = getHigher8(val)
+	*lowerRegPtr = getLower8(val)
 
 	return 3
 
@@ -565,13 +566,22 @@ func (c *Cpu) xorReg(regPtr *uint8) (cycles uint64) {
 
 }
 
-func getHigher(orig uint16) uint8 {
+func getHigher8(orig uint16) uint8 {
 	return uint8(orig >> 8 & 0xFF)
 }
 
-func getLower(orig uint16) uint8 {
+func getLower8(orig uint16) uint8 {
 	return uint8(orig)
 }
+
+func getHigher4(orig uint8) uint8 {
+	return uint8((orig >> 4) & 0x0F)
+}
+
+func getLower4(orig uint8) uint8 {
+	return uint8(orig & 0x0f)
+}
+
 func (c *Cpu) br() {
 	c.DumpRegs()
 	c.Memory.DumpHram()
@@ -684,4 +694,12 @@ func (c *Cpu) SetCarryFlag(cond bool) { // c
 
 func (c *Cpu) GetBreakpoints() []uint16 {
 	return c.breakpoints
+}
+
+func (c *Cpu) GetCurrentGame() []byte {
+	return c.currentGame.GetData()
+}
+
+func (c *Cpu) GetCurrentBootrom() []byte {
+	return c.currentBootrom.GetData()
 }

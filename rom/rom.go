@@ -10,6 +10,10 @@ type Rom struct {
 	data []byte
 }
 
+func (r *Rom) GetData() []byte {
+	return r.data
+}
+
 func (r *Rom) GetLength() int {
 	return len(r.data)
 }

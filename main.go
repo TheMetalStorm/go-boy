@@ -34,10 +34,9 @@ func onRestartButton() {
 func loop() {
 
 	curSizeX, _ := g.SingleWindow().CurrentSize()
-	//TODO add Stack
 	hramRows := makeHramTableFromSlice(c.Memory.Hram[:])
 	slices.Reverse(hramRows)
-	bank0Rows := makeHexTableRowsDebuggable(c.Memory.Bank0[:], 0)
+
 	regColumns := makeRegColumns()
 
 	g.SingleWindow().Layout(
@@ -60,10 +59,48 @@ func loop() {
 			g.TabBar().TabItems(
 
 				g.TabItem("Bank0").Layout(
-					g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(bank0Rows...),
+					g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(makeHexTableRowsDebuggable(c.Memory.Bank0[:], 0)...),
 				),
-				g.TabItem("B").Layout(
-					g.Label("This is second tab"),
+
+				g.TabItem("BankN").Layout(
+					g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(makeHexTableRowsDebuggable(c.Memory.Bank1[:], 0x4000)...),
+				),
+
+				g.TabItem("Vram").Layout(
+					g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(makeHexTableRows(c.Memory.Vram[:], 0x8000)...),
+				),
+
+				g.TabItem("Extram").Layout(
+					g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(makeHexTableRows(c.Memory.Extram[:], 0xa000)...),
+				),
+
+				g.TabItem("Wram1").Layout(
+					g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(makeHexTableRows(c.Memory.Wram1[:], 0xc000)...),
+				),
+
+				g.TabItem("Wram2").Layout(
+					g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(makeHexTableRows(c.Memory.Wram2[:], 0xd000)...),
+				),
+
+				g.TabItem("Oam").Layout(
+					g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(makeHexTableRows(c.Memory.Oam[:], 0xfe00)...),
+				),
+
+				// Todo better view for Io with description
+				g.TabItem("Io").Layout(
+					g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(makeHexTableRows(c.Memory.Io.Regs[:], 0xff00)...),
+				),
+
+				g.TabItem("Hram").Layout(
+					g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(makeHexTableRows(c.Memory.Hram[:], 0xff80)...),
+				),
+
+				g.TabItem("Ie").Layout(
+					g.Labelf("0xFFFF: %02x", c.Memory.Ie),
+				),
+
+				g.TabItem("Game Code").Layout(
+					g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(makeHexTableRows(c.GetCurrentGame(), 0)...),
 				),
 			),
 		),
@@ -82,11 +119,12 @@ func makeHramTableFromSlice(slice []uint8) []*g.TableRowWidget {
 }
 
 func makeHexTableRows(slice []uint8, regionOffset uint32) []*g.TableRowWidget {
-	var rowLen int = len(slice) / 16
+	var rowLen int = (len(slice) / 16) + 1
 	rows := make([]*g.TableRowWidget, rowLen)
 	rowInd := 0
 
 	for hexOffset := 0; hexOffset < len(slice); hexOffset += 16 {
+
 		rows[rowInd] = g.TableRow(
 			g.Selectablef("0x%04x: ", int(regionOffset)+hexOffset),
 			makeHexRowCell(slice, regionOffset, hexOffset, 0),
@@ -107,6 +145,10 @@ func makeHexTableRows(slice []uint8, regionOffset uint32) []*g.TableRowWidget {
 			makeHexRowCell(slice, regionOffset, hexOffset, 15),
 		)
 		rowInd++
+	}
+
+	if rows[len(rows)-1] == nil {
+		rows[len(rows)-1] = g.TableRow()
 	}
 	return rows
 }
@@ -142,12 +184,20 @@ func makeHexTableRowsDebuggable(slice []uint8, regionOffset uint32) []*g.TableRo
 }
 
 func makeHexRowCell(slice []uint8, regionOffset uint32, hexOffset int, rowOffset int) g.Widget {
+	localAddr := uint16(hexOffset) + uint16(rowOffset)
 
+	if int(localAddr) > len(slice)-1 {
+		return g.Label(" ")
+	}
 	return g.Selectablef("0x%02x ", slice[hexOffset+rowOffset])
 
 }
 
 func makeHexRowCellDebugabble(slice []uint8, regionOffset uint32, hexOffset int, rowOffset int) g.Widget {
+	localAddr := uint16(hexOffset) + uint16(rowOffset)
+	if int(localAddr) > len(slice)-1 {
+		return g.Label(" ")
+	}
 	globalAddr := uint16(regionOffset) + uint16(hexOffset) + uint16(rowOffset)
 
 	style := g.Style()
@@ -163,7 +213,7 @@ func makeHexRowCellDebugabble(slice []uint8, regionOffset uint32, hexOffset int,
 	style.SetColor(g.StyleColorButtonHovered, color.RGBA{0x00, 0xff, 0x00, 0x00})
 	style.SetColor(g.StyleColorButtonActive, color.RGBA{0x00, 0xff, 0x00, 0x00})
 
-	button := g.Buttonf("0x%02x ", slice[hexOffset+rowOffset]).OnClick(OnClickMemView(globalAddr))
+	button := g.Buttonf("0x%02x ", slice[localAddr]).OnClick(OnClickMemView(globalAddr))
 	return style.To(button)
 
 }
