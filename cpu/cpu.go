@@ -30,8 +30,7 @@ type Cpu struct {
 	Memory             *Mmap
 	ranCyclesThisFrame uint64
 
-	currentGame    *Rom
-	currentBootrom *Rom
+	currentGame *Rom
 
 	Halt bool
 	//Refactor into debugger struct
@@ -43,63 +42,73 @@ type Cpu struct {
 
 func NewCpu() *Cpu {
 	cpu := Cpu{}
-	cpu.Memory = &mmap.Mmap{}
-	cpu.Autorun = true
-	cpu.DoStep = false
-	cpu.LastBPHit = -1
-	cpu.Halt = false
-
+	cpu.Restart()
 	return &cpu
 }
 func (cpu *Cpu) Restart() {
-	cpu.A = 0
-	cpu.F = 0
-	cpu.B = 0
-	cpu.C = 0
-	cpu.D = 0
-	cpu.E = 0
-	cpu.H = 0
-	cpu.L = 0
-	cpu.SP = 0
-	cpu.PC = 0
+
 	cpu.Memory = &mmap.Mmap{}
+
+	cpu.A = 0x01
+	cpu.F = 0xB0
+	cpu.B = 0x00
+	cpu.C = 0x13
+	cpu.D = 0x00
+	cpu.E = 0xD8
+	cpu.H = 0x01
+	cpu.L = 0x4D
+	cpu.SP = 0xFFFE
+	cpu.PC = 0x100
+
+	cpu.Memory.SetValue(0xFF05, 0x00) // TIMA
+	cpu.Memory.SetValue(0xFF06, 0x00) // TMA
+	cpu.Memory.SetValue(0xFF07, 0x00) // TAC
+	cpu.Memory.SetValue(0xFF10, 0x80) // NR10
+	cpu.Memory.SetValue(0xFF11, 0xBF) // NR11
+	cpu.Memory.SetValue(0xFF12, 0xF3) // NR12
+	cpu.Memory.SetValue(0xFF14, 0xBF) // NR14
+	cpu.Memory.SetValue(0xFF16, 0x3F) // NR21
+	cpu.Memory.SetValue(0xFF17, 0x00) // NR22
+	cpu.Memory.SetValue(0xFF19, 0xBF) // NR24
+	cpu.Memory.SetValue(0xFF1A, 0x7F) // NR30
+	cpu.Memory.SetValue(0xFF1B, 0xFF) // NR31
+	cpu.Memory.SetValue(0xFF1C, 0x9F) // NR32
+	cpu.Memory.SetValue(0xFF1E, 0xBF) // NR33
+	cpu.Memory.SetValue(0xFF20, 0xFF) // NR41
+	cpu.Memory.SetValue(0xFF21, 0x00) // NR42
+	cpu.Memory.SetValue(0xFF22, 0x00) // NR43
+	cpu.Memory.SetValue(0xFF23, 0xBF) // NR30
+	cpu.Memory.SetValue(0xFF24, 0x77) // NR50
+	cpu.Memory.SetValue(0xFF25, 0xF3) // NR51
+	cpu.Memory.SetValue(0xFF26, 0xF1) // NR52 (GB)
+	cpu.Memory.SetValue(0xFF40, 0x91) // LCDC
+	cpu.Memory.SetValue(0xFF42, 0x00) // SCY
+	cpu.Memory.SetValue(0xFF43, 0x00) // SCX
+	cpu.Memory.SetValue(0xFF45, 0x00) // LYC
+	cpu.Memory.SetValue(0xFF47, 0xFC) // BGP
+	cpu.Memory.SetValue(0xFF48, 0xFF) // OBP0
+	cpu.Memory.SetValue(0xFF49, 0xFF) // OBP1
+	cpu.Memory.SetValue(0xFF4A, 0x00) // WY
+	cpu.Memory.SetValue(0xFF4B, 0x00) // WX
+	cpu.Memory.SetValue(0xFFFF, 0x00) // IE
+
 	cpu.ranCyclesThisFrame = 0
-	cpu.Autorun = false
 	cpu.DoStep = false
 	cpu.LastBPHit = -1
 	cpu.Halt = false
 
 	//for Testing
-	cpu.currentBootrom = rom.NewRom("./bootroms/dmg_boot.bin")
-	cpu.LoadBootRom(cpu.currentBootrom)
 	cpu.currentGame = rom.NewRom("./games/tetris.gb")
 	cpu.LoadRom(cpu.currentGame)
 
 }
 
-func (c *Cpu) LoadBootRom(r *Rom) {
-	// TODO: different for gbc boot rom?
-	for i := 0; i <= 0xff; i++ {
-		newVal, _ := r.ReadByteAt(uint16(i))
-		c.Memory.SetValue(uint16(i), newVal)
-	}
-
-}
-
 func (c *Cpu) LoadRom(r *Rom) {
 	// TODO: for now only fills bank 0
-	for i := 0x100; i <= 0x3fff; i++ {
+	for i := 0x0; i <= 0x3fff; i++ {
 		newVal, _ := r.ReadByteAt(uint16(i))
 		c.Memory.SetValue(uint16(i), newVal)
 	}
-}
-
-func (c *Cpu) UnloadBootrom(r *Rom) {
-	for i := 0; i < 0x100; i++ {
-		newVal, _ := r.ReadByteAt(uint16(i))
-		c.Memory.SetValue(uint16(i), newVal)
-	}
-
 }
 
 func (c *Cpu) ToggleBP(addr uint16) {
@@ -123,10 +132,7 @@ func (c *Cpu) Run() {
 			continue
 		}
 		//NOTE: HARDCODED FOR DMG BOOT ROM
-		if c.PC == 0x100 {
-			//unmap boot rom
-			c.UnloadBootrom(c.currentGame)
-		}
+
 		if c.Autorun {
 			if slices.Contains(c.GetBreakpoints(), c.PC) && c.PC != uint16(c.LastBPHit) {
 				c.Autorun = false
@@ -767,8 +773,4 @@ func (c *Cpu) GetBreakpoints() []uint16 {
 
 func (c *Cpu) GetCurrentGame() []byte {
 	return c.currentGame.GetData()
-}
-
-func (c *Cpu) GetCurrentBootrom() []byte {
-	return c.currentBootrom.GetData()
 }
