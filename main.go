@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go-boy/cpu"
 	"image/color"
+	"os"
 	"slices"
 
 	g "github.com/AllenDang/giu"
@@ -249,17 +250,30 @@ func makeRegColumns() []*g.TableColumnWidget {
 
 func main() {
 
-	go func() {
-		wnd := g.NewMasterWindow("GB Debugger", 800, 800, g.MasterWindowFlagsMaximized)
-		wnd.Run(loop)
-	}()
+	isDebugMode := false
+	argsWithoutProg := os.Args[1:]
+
+	if len(argsWithoutProg) >= 1 {
+		if argsWithoutProg[0] == "--debug" {
+			isDebugMode = true
+		}
+
+	}
+
+	c.Restart()
+
+	if isDebugMode {
+		go func() {
+			wnd := g.NewMasterWindow("GB Debugger", 800, 800, g.MasterWindowFlagsMaximized)
+			wnd.Run(loop)
+		}()
+	} else {
+		c.Autorun = true
+	}
 	emulate()
 
 }
 
 func emulate() {
-
-	c.Restart()
-	c.Autorun = false
 	c.Run()
 }
