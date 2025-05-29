@@ -174,21 +174,33 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 
 	// Load 8 Bit Imm to Reg
 	case 0x3e:
-		return c.loadImm8Reg(&c.A)
+		return c.loadImm8IntoReg(&c.A)
 	case 0x06:
-		return c.loadImm8Reg(&c.B)
+		return c.loadImm8IntoReg(&c.B)
 	case 0x0e:
-		return c.loadImm8Reg(&c.C)
+		return c.loadImm8IntoReg(&c.C)
+	case 0x1e:
+		return c.loadImm8IntoReg(&c.E)
+	case 0x2e:
+		return c.loadImm8IntoReg(&c.L)
 
-	// decrement Reg8
+		// decrement Reg8
+	case 0x3d:
+		return c.decrementReg8(&c.A)
 	case 0x05:
 		return c.decrementReg8(&c.B)
+	case 0x0d:
+		return c.decrementReg8(&c.C)
 
-	// increment Reg8
+		// increment Reg8
+	case 0x04:
+		return c.incrementReg8(&c.B)
 	case 0x0c:
 		return c.incrementReg8(&c.C)
 
-	// increment Reg16
+		// increment Reg16
+	case 0x13:
+		return c.incrementReg16(REG_DE)
 	case 0x23:
 		return c.incrementReg16(REG_HL)
 	//jump
@@ -196,6 +208,10 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return c.jump()
 	case 0x20:
 		return c.jumpRelIf(c.GetZeroFlag() == 0)
+	case 0x28:
+		return c.jumpRelIf(c.GetZeroFlag() != 0)
+	case 0x18:
+		return c.jumpRelIf(true)
 		// call
 	case 0xcd:
 		return c.call16Imm()
@@ -234,18 +250,30 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0x77:
 		return c.storeRegInMemAddr(c.GetHL(), c.A)
 
+	case 0xea:
+		return c.storeRegInImmMemAddr(c.A)
+
 	//store reg in imm mem
 	case 0xe0:
-		return c.storeRegInImmMemAddr(c.A)
+		return c.storeRegInAfterIoImmMemAddr(c.A)
 
 	//store mem in reg
 	case 0x1a:
-		return c.storeMemInReg(c.GetDE(), &c.A)
+		return c.storeMemIntoReg(c.GetDE(), &c.A)
 
-	// store val in Reg
+		//store imm mem in reg
+	case 0xf0:
+		return c.storeAfterIoImm8MemAddrIntoReg(&c.A)
+
+	// store Reg in Reg
+	case 0x7b:
+		return c.storeValInReg(&c.A, c.E)
 	case 0x4f:
 		return c.storeValInReg(&c.C, c.A)
-
+	case 0x57:
+		return c.storeValInReg(&c.D, c.A)
+	case 0x67:
+		return c.storeValInReg(&c.H, c.A)
 	// push 16
 	case 0xf5:
 		return c.push16(&c.A, &c.F)
@@ -261,7 +289,16 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		c.PC++
 		c.Memory.Io.SetIE(1)
 		return 1
-
+	//compare imm to A
+	case 0xFE:
+		c.PC++
+		data, skip := c.Memory.ReadByteAt(c.PC)
+		c.PC += skip
+		c.SetZeroFlag((c.A - data) == 0)
+		c.SetSubFlag(true)
+		c.SetHalfCarryFlag(isHalfCarryFlagSubtraction(c.A, data))
+		c.SetCarryFlag(isCarryFlagSubtraction(c.A, data))
+		return 2
 	//RLA
 	//similiar to cbRegRotateLeft (other numBytes, numCycles and different flags)
 	case 0x17:
@@ -348,6 +385,18 @@ func (c *Cpu) cbSetZeroToComplementRegBit(regPtr *uint8, bitPos int) uint64 {
 	return 2
 }
 
+func isCarryFlagSubtraction(valA uint8, valB uint8) bool {
+
+	return valB > valA
+}
+
+func isCarryFlagAddition(valA uint8, valB uint8) bool {
+
+	var add uint16 = uint16(valA) + uint16(valB)
+
+	return (add) > 0xFF
+}
+
 func isHalfCarryFlagSubtraction(valA uint8, valB uint8) bool {
 
 	lowerA := getLower4(valA)
@@ -425,7 +474,7 @@ func (c *Cpu) call16Imm() (cycles uint64) {
 	return 6
 }
 
-func (c *Cpu) storeMemInReg(address uint16, regPtr *uint8) (cycles uint64) {
+func (c *Cpu) storeMemIntoReg(address uint16, regPtr *uint8) (cycles uint64) {
 
 	val, bytesRead := c.Memory.ReadByteAt(address)
 	c.PC += bytesRead
@@ -435,7 +484,27 @@ func (c *Cpu) storeMemInReg(address uint16, regPtr *uint8) (cycles uint64) {
 	return 2
 }
 
+func (c *Cpu) storeAfterIoImm8MemAddrIntoReg(regPtr *uint8) (cycles uint64) {
+	c.PC++
+	immData, skip := c.Memory.ReadByteAt(c.PC)
+	c.PC += skip
+
+	loadedFromMem, _ := c.Memory.ReadByteAt(IO_START_ADDR + uint16(immData))
+
+	*regPtr = loadedFromMem
+
+	return 3
+}
+
 func (c *Cpu) storeRegInImmMemAddr(val uint8) (cycles uint64) {
+	c.PC++
+	a16, bytesRead := c.Memory.Read16At(c.PC)
+	c.PC += bytesRead
+	c.Memory.SetValue(a16, val)
+	return 4
+}
+
+func (c *Cpu) storeRegInAfterIoImmMemAddr(val uint8) (cycles uint64) {
 	c.PC++
 	a8, bytesRead := c.Memory.ReadByteAt(c.PC)
 	c.PC += bytesRead
@@ -512,7 +581,7 @@ func (c *Cpu) storeRegInMemAddr(address uint16, toStore uint8) (cycles uint64) {
 	return 2
 }
 
-func (c *Cpu) loadImm8Reg(regPtr *uint8) (cycles uint64) {
+func (c *Cpu) loadImm8IntoReg(regPtr *uint8) (cycles uint64) {
 	var skip uint16
 	var val uint8
 	c.PC++
