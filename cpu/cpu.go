@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"go-boy/mmap"
 	"go-boy/rom"
-	"slices"
+	"os"
 )
 
 type Rom = rom.Rom
@@ -12,6 +12,8 @@ type Mmap = mmap.Mmap
 
 // http://www.codeslinger.co.uk/pages/projects/gameboy/beginning.html
 var MAX_CYCLES_PER_FRAME uint64 = 69905
+var GB_CLOCK_SPEED_HZ uint64 = 4194304
+var DIV_REG_INCREMENT_HZ = 16384
 var IO_START_ADDR uint16 = 0xff00
 
 type Cpu struct {
@@ -27,17 +29,9 @@ type Cpu struct {
 	SP uint16
 	PC uint16
 
-	Memory             *Mmap
-	ranCyclesThisFrame uint64
-
-	currentGame *Rom
-
-	Halt bool
-	//Refactor into debugger struct
-	Autorun     bool
-	DoStep      bool
-	breakpoints []uint16
-	LastBPHit   int
+	Memory              *Mmap
+	ranMCyclesThisFrame uint64
+	currentGame         *Rom
 }
 
 func NewCpu() *Cpu {
@@ -92,10 +86,7 @@ func (cpu *Cpu) Restart() {
 	cpu.Memory.SetValue(0xFF4B, 0x00) // WX
 	cpu.Memory.SetValue(0xFFFF, 0x00) // IE
 
-	cpu.ranCyclesThisFrame = 0
-	cpu.DoStep = false
-	cpu.LastBPHit = -1
-	cpu.Halt = false
+	cpu.ranMCyclesThisFrame = 0
 
 	//for Testing
 	cpu.currentGame = rom.NewRom("./games/tetris.gb")
@@ -111,60 +102,52 @@ func (c *Cpu) LoadRom(r *Rom) {
 	}
 }
 
-func (c *Cpu) ToggleBP(addr uint16) {
-	//No point in setting BP on Mem Adress 0
-	if addr == 0 {
-		return
-	}
-	for i, b := range c.breakpoints {
-		if b == addr {
-			c.breakpoints = append(c.breakpoints[:i], c.breakpoints[i+1:]...)
-			return
-		}
-	}
-	c.breakpoints = append(c.breakpoints, addr)
-}
-
 func (c *Cpu) Run() {
 
 	for {
-		if c.Halt {
-			continue
-		}
-		//NOTE: HARDCODED FOR DMG BOOT ROM
-
-		if c.Autorun {
-			if slices.Contains(c.GetBreakpoints(), c.PC) && c.PC != uint16(c.LastBPHit) {
-				c.Autorun = false
-				c.LastBPHit = int(c.PC)
-			} else {
-				c.Step()
-			}
-		} else {
-			if c.DoStep {
-				c.Step()
-				c.DoStep = false
-			}
-		}
+		c.Step()
 	}
 }
 
 func (c *Cpu) Step() {
 
-	//if we step, we should be able to trigger on the same BP again (loop), so we clear here
-	c.LastBPHit = -1
 	//fetch Instruction
 	instr, _ := c.Memory.ReadByteAt(c.PC)
-	c.ranCyclesThisFrame += 4 //instr fetch (and decode i guess) takes 4 (machine?) cycles
+	var ranMCyclesThisStep uint64 = 4 //instr fetch (and decode i guess) takes 4 (machine?) cycles
 	//decode/Execute
-	c.ranCyclesThisFrame += c.decodeExecute(instr)
+	ranMCyclesThisStep += c.decodeExecute(instr)
+	c.ranMCyclesThisFrame += ranMCyclesThisStep
+
+	c.updateTimers(ranMCyclesThisStep)
 }
+
+func (c *Cpu) updateTimers(cyclesThisStep uint64) {
+	// c.updateDivReg(cyclesThisStep)
+
+}
+
+//TODO
+// func (c *Cpu) updateDivReg(cyclesThisStep uint64) {
+// 	//TODO: how to calculate increment?
+// 	incrementBy := 0
+// 	curDivReg, _ := c.Memory.ReadByteAt(0xFF04)
+
+// 	c.Memory.SetValue(0xFF04, uint8(incrementBy))
+// 	isOverflow := isCarryFlagAddition(curDivReg, uint8(incrementBy))
+
+// 	//TODO: when overflow do sth probably
+
+// }
 
 // returns machine cycles it took to execute
 func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 
 	switch instr {
 
+	//nop
+	case 0x00:
+		c.PC++
+		return 1
 	//cb
 	case 0xcb:
 		return c.handleCB()
@@ -210,8 +193,8 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0x23:
 		return c.incrementReg16(REG_HL)
 	//jump
-	case 0xC3:
-		return c.jump()
+	//case 0xC3:
+	//	return c.jump()
 	case 0x20:
 		return c.jumpRelIf(c.GetZeroFlag() == 0)
 	case 0x28:
@@ -295,6 +278,11 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		c.PC++
 		c.Memory.Io.SetIE(1)
 		return 1
+	case 0xf3:
+		c.PC++
+		c.Memory.Io.SetIE(0)
+		return 1
+
 	//compare imm to A
 	case 0xFE:
 		c.PC++
@@ -330,7 +318,7 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return 1
 	default:
 		fmt.Printf("ERROR at PC 0x%04x: 0x%02x is not a recognized instruction!\n", c.PC, instr)
-		c.Halt = true
+		os.Exit(0)
 		return 0
 
 	}
@@ -350,7 +338,8 @@ func (c *Cpu) handleCB() (cycles uint64) {
 	default:
 		c.PC -= 2
 		fmt.Printf("ERROR at PC 0x%04x: 0xcb%02x is not a recognized instruction!\n", c.PC, instr)
-		c.Halt = true
+		os.Exit(0)
+
 		return 0
 	}
 }
@@ -657,11 +646,11 @@ func getLower4(orig uint8) uint8 {
 	return uint8(orig & 0x0f)
 }
 
-func (c *Cpu) br() {
-	c.DumpRegs()
-	c.Memory.DumpHram()
-	c.Autorun = false
-}
+// func (c *Cpu) br() {
+// 	c.DumpRegs()
+// 	c.Memory.DumpHram()
+// 	c.debugger.Autorun = false
+// }
 
 func (c *Cpu) DumpRegs() {
 	fmt.Printf("Registers:\n\n")
@@ -765,10 +754,6 @@ func (c *Cpu) SetCarryFlag(cond bool) { // c
 	} else {
 		c.SetAF(c.GetAF() &^ (1 << 4))
 	}
-}
-
-func (c *Cpu) GetBreakpoints() []uint16 {
-	return c.breakpoints
 }
 
 func (c *Cpu) GetCurrentGame() []byte {
