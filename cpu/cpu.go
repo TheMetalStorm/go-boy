@@ -193,8 +193,8 @@ func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0x23:
 		return c.incrementReg16(REG_HL)
 	//jump
-	//case 0xC3:
-	//	return c.jump()
+	case 0xC3:
+		return c.jump()
 	case 0x20:
 		return c.jumpRelIf(c.GetZeroFlag() == 0)
 	case 0x28:
@@ -645,12 +645,6 @@ func getHigher4(orig uint8) uint8 {
 func getLower4(orig uint8) uint8 {
 	return uint8(orig & 0x0f)
 }
-
-// func (c *Cpu) br() {
-// 	c.DumpRegs()
-// 	c.Memory.DumpHram()
-// 	c.debugger.Autorun = false
-// }
 
 func (c *Cpu) DumpRegs() {
 	fmt.Printf("Registers:\n\n")
