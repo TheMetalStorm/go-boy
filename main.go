@@ -26,6 +26,7 @@ func main() {
 	}
 
 	c.Restart()
+
 	dbg := debugger.NewDebugger()
 	dbg.SetCpu(c)
 

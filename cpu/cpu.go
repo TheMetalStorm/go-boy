@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"go-boy/mmap"
 	"go-boy/rom"
+	"go-boy/screen"
+
 	"os"
 )
 
 type Rom = rom.Rom
 type Mmap = mmap.Mmap
+type Screen = screen.Screen
 
 // http://www.codeslinger.co.uk/pages/projects/gameboy/beginning.html
 var MAX_CYCLES_PER_FRAME uint64 = 69905
@@ -16,7 +19,12 @@ var GB_CLOCK_SPEED_HZ uint64 = 4194304
 var DIV_REG_INCREMENT_HZ = 16384
 var IO_START_ADDR uint16 = 0xff00
 
+// TODO Refactor to emulator
 type Cpu struct {
+	//TODO
+	//when refactore to emulator, this is now struct Cpu
+	//cpu *CPU
+	//{
 	A uint8
 	F uint8
 	B uint8
@@ -29,9 +37,12 @@ type Cpu struct {
 	SP uint16
 	PC uint16
 
-	Memory              *Mmap
+	Memory *Mmap
+	//}
 	ranMCyclesThisFrame uint64
 	currentGame         *Rom
+
+	screen *Screen
 }
 
 func NewCpu() *Cpu {
@@ -118,26 +129,33 @@ func (c *Cpu) Step() {
 	ranMCyclesThisStep += c.decodeExecute(instr)
 	c.ranMCyclesThisFrame += ranMCyclesThisStep
 
+	// TODO
+	//c.handleInterrupts()
+
 	c.updateTimers(ranMCyclesThisStep)
+
+	c.refreshScreen()
 }
 
 func (c *Cpu) updateTimers(cyclesThisStep uint64) {
-	// c.updateDivReg(cyclesThisStep)
+	//TODO other timers
+	//https://gbdev.io/pandocs/Timer_and_Divider_Registers.html#ff05--tima-timer-counter
+	c.updateDivReg(cyclesThisStep)
 
 }
 
-//TODO
-// func (c *Cpu) updateDivReg(cyclesThisStep uint64) {
-// 	//TODO: how to calculate increment?
-// 	incrementBy := 0
-// 	curDivReg, _ := c.Memory.ReadByteAt(0xFF04)
+func (c *Cpu) refreshScreen() {
+	c.screen.Update()
+}
 
-// 	c.Memory.SetValue(0xFF04, uint8(incrementBy))
-// 	isOverflow := isCarryFlagAddition(curDivReg, uint8(incrementBy))
+func (c *Cpu) updateDivReg(cyclesThisStep uint64) {
+	// if we crossed the 64 M Cycles boundary this Step
+	if (c.ranMCyclesThisFrame-cyclesThisStep)%64 != c.ranMCyclesThisFrame%64 {
+		read, _ := c.Memory.ReadByteAt(0xFF04)
+		c.Memory.SetValue(0xFF04, read+1)
+	}
 
-// 	//TODO: when overflow do sth probably
-
-// }
+}
 
 // returns machine cycles it took to execute
 func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
@@ -752,4 +770,8 @@ func (c *Cpu) SetCarryFlag(cond bool) { // c
 
 func (c *Cpu) GetCurrentGame() []byte {
 	return c.currentGame.GetData()
+}
+
+func (c *Cpu) SetScreen(screen *Screen) {
+	c.screen = screen
 }
