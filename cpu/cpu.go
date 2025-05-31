@@ -3,28 +3,13 @@ package cpu
 import (
 	"fmt"
 	"go-boy/mmap"
-	"go-boy/rom"
-	"go-boy/screen"
 
 	"os"
 )
 
-type Rom = rom.Rom
 type Mmap = mmap.Mmap
-type Screen = screen.Screen
 
-// http://www.codeslinger.co.uk/pages/projects/gameboy/beginning.html
-var MAX_CYCLES_PER_FRAME uint64 = 69905
-var GB_CLOCK_SPEED_HZ uint64 = 4194304
-var DIV_REG_INCREMENT_HZ = 16384
-var IO_START_ADDR uint16 = 0xff00
-
-// TODO Refactor to emulator
 type Cpu struct {
-	//TODO
-	//when refactore to emulator, this is now struct Cpu
-	//cpu *CPU
-	//{
 	A uint8
 	F uint8
 	B uint8
@@ -38,18 +23,16 @@ type Cpu struct {
 	PC uint16
 
 	Memory *Mmap
-	//}
-	ranMCyclesThisFrame uint64
-	currentGame         *Rom
-
-	screen *Screen
 }
+
+var IO_START_ADDR uint16 = 0xff00
 
 func NewCpu() *Cpu {
-	cpu := Cpu{}
+	cpu := &Cpu{}
 	cpu.Restart()
-	return &cpu
+	return cpu
 }
+
 func (cpu *Cpu) Restart() {
 
 	cpu.Memory = &mmap.Mmap{}
@@ -97,274 +80,224 @@ func (cpu *Cpu) Restart() {
 	cpu.Memory.SetValue(0xFF4B, 0x00) // WX
 	cpu.Memory.SetValue(0xFFFF, 0x00) // IE
 
-	cpu.ranMCyclesThisFrame = 0
-
-	//for Testing
-	cpu.currentGame = rom.NewRom("./games/tetris.gb")
-	cpu.LoadRom(cpu.currentGame)
-
 }
 
-func (c *Cpu) LoadRom(r *Rom) {
-	// TODO: for now only fills bank 0
-	for i := 0x0; i <= 0x3fff; i++ {
-		newVal, _ := r.ReadByteAt(uint16(i))
-		c.Memory.SetValue(uint16(i), newVal)
-	}
-}
-
-func (c *Cpu) Run() {
-
-	for {
-		c.Step()
-	}
-}
-
-func (c *Cpu) Step() {
-
-	//fetch Instruction
-	instr, _ := c.Memory.ReadByteAt(c.PC)
+func (cpu *Cpu) Step() uint64 {
+	instr, _ := cpu.Memory.ReadByteAt(cpu.PC)
 	var ranMCyclesThisStep uint64 = 4 //instr fetch (and decode i guess) takes 4 (machine?) cycles
 	//decode/Execute
-	ranMCyclesThisStep += c.decodeExecute(instr)
-	c.ranMCyclesThisFrame += ranMCyclesThisStep
-
-	// TODO
-	//c.handleInterrupts()
-
-	c.updateTimers(ranMCyclesThisStep)
-
-	c.refreshScreen()
-}
-
-func (c *Cpu) updateTimers(cyclesThisStep uint64) {
-	//TODO other timers
-	//https://gbdev.io/pandocs/Timer_and_Divider_Registers.html#ff05--tima-timer-counter
-	c.updateDivReg(cyclesThisStep)
-
-}
-
-func (c *Cpu) refreshScreen() {
-	c.screen.Update()
-}
-
-func (c *Cpu) updateDivReg(cyclesThisStep uint64) {
-	// if we crossed the 64 M Cycles boundary this Step
-	if (c.ranMCyclesThisFrame-cyclesThisStep)%64 != c.ranMCyclesThisFrame%64 {
-		read, _ := c.Memory.ReadByteAt(0xFF04)
-		c.Memory.SetValue(0xFF04, read+1)
-	}
-
+	ranMCyclesThisStep += cpu.decodeExecute(instr)
+	return ranMCyclesThisStep
 }
 
 // returns machine cycles it took to execute
-func (c *Cpu) decodeExecute(instr byte) (cycles uint64) {
+func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 
 	switch instr {
 
 	//nop
 	case 0x00:
-		c.PC++
+		cpu.PC++
 		return 1
 	//cb
 	case 0xcb:
-		return c.handleCB()
+		return cpu.handleCB()
 
 	//16 Load 16 Bit Imm to Reg
 	case 0x31:
-		r := c.loadImm16Reg(&c.SP)
+		r := cpu.loadImm16Reg(&cpu.SP)
 		return r
 	case 0x21:
-		return c.loadImm16Reg2Ptr(&c.H, &c.L)
+		return cpu.loadImm16Reg2Ptr(&cpu.H, &cpu.L)
 	case 0x11:
-		return c.loadImm16Reg2Ptr(&c.D, &c.E)
+		return cpu.loadImm16Reg2Ptr(&cpu.D, &cpu.E)
 
 	// Load 8 Bit Imm to Reg
 	case 0x3e:
-		return c.loadImm8IntoReg(&c.A)
+		return cpu.loadImm8IntoReg(&cpu.A)
 	case 0x06:
-		return c.loadImm8IntoReg(&c.B)
+		return cpu.loadImm8IntoReg(&cpu.B)
 	case 0x0e:
-		return c.loadImm8IntoReg(&c.C)
+		return cpu.loadImm8IntoReg(&cpu.C)
 	case 0x1e:
-		return c.loadImm8IntoReg(&c.E)
+		return cpu.loadImm8IntoReg(&cpu.E)
 	case 0x2e:
-		return c.loadImm8IntoReg(&c.L)
+		return cpu.loadImm8IntoReg(&cpu.L)
 
 		// decrement Reg8
 	case 0x3d:
-		return c.decrementReg8(&c.A)
+		return cpu.decrementReg8(&cpu.A)
 	case 0x05:
-		return c.decrementReg8(&c.B)
+		return cpu.decrementReg8(&cpu.B)
 	case 0x0d:
-		return c.decrementReg8(&c.C)
+		return cpu.decrementReg8(&cpu.C)
 
 		// increment Reg8
 	case 0x04:
-		return c.incrementReg8(&c.B)
+		return cpu.incrementReg8(&cpu.B)
 	case 0x0c:
-		return c.incrementReg8(&c.C)
+		return cpu.incrementReg8(&cpu.C)
 
 		// increment Reg16
 	case 0x13:
-		return c.incrementReg16(REG_DE)
+		return cpu.incrementReg16(REG_DE)
 	case 0x23:
-		return c.incrementReg16(REG_HL)
+		return cpu.incrementReg16(REG_HL)
 	//jump
 	case 0xC3:
-		return c.jump()
+		return cpu.jump()
 	case 0x20:
-		return c.jumpRelIf(c.GetZeroFlag() == 0)
+		return cpu.jumpRelIf(cpu.GetZeroFlag() == 0)
 	case 0x28:
-		return c.jumpRelIf(c.GetZeroFlag() != 0)
+		return cpu.jumpRelIf(cpu.GetZeroFlag() != 0)
 	case 0x18:
-		return c.jumpRelIf(true)
+		return cpu.jumpRelIf(true)
 		// call
 	case 0xcd:
-		return c.call16Imm()
+		return cpu.call16Imm()
 	//ret
 	case 0xc9:
 
-		readLow, _ := c.Memory.ReadByteAt(c.SP)
-		c.SP++
+		readLow, _ := cpu.Memory.ReadByteAt(cpu.SP)
+		cpu.SP++
 
-		readHigh, _ := c.Memory.ReadByteAt(c.SP)
-		c.SP++
+		readHigh, _ := cpu.Memory.ReadByteAt(cpu.SP)
+		cpu.SP++
 		newPC := (uint16(readLow) | uint16(readHigh)<<8)
 
-		c.PC = newPC
+		cpu.PC = newPC
 
 		return 4
 
 	// xor Reg
 	case 0xaf:
-		return c.xorReg(&c.A)
+		return cpu.xorReg(&cpu.A)
 
 		//store reg in mem
 	case 0x22:
-		hl := c.GetHL()
-		mc := c.storeRegInMemAddr(hl, c.A)
-		c.SetHL(hl + 1)
+		hl := cpu.GetHL()
+		mc := cpu.storeRegInMemAddr(hl, cpu.A)
+		cpu.SetHL(hl + 1)
 		return mc
 	case 0x32:
-		hl := c.GetHL()
-		mc := c.storeRegInMemAddr(hl, c.A)
-		c.SetHL(hl - 1)
+		hl := cpu.GetHL()
+		mc := cpu.storeRegInMemAddr(hl, cpu.A)
+		cpu.SetHL(hl - 1)
 		return mc
 	case 0xe2:
-		return c.storeRegInMemAddr(IO_START_ADDR+uint16(c.C), c.A)
+		return cpu.storeRegInMemAddr(IO_START_ADDR+uint16(cpu.C), cpu.A)
 
 	case 0x77:
-		return c.storeRegInMemAddr(c.GetHL(), c.A)
+		return cpu.storeRegInMemAddr(cpu.GetHL(), cpu.A)
 
 	case 0xea:
-		return c.storeRegInImmMemAddr(c.A)
+		return cpu.storeRegInImmMemAddr(cpu.A)
 
 	//store reg in imm mem
 	case 0xe0:
-		return c.storeRegInAfterIoImmMemAddr(c.A)
+		return cpu.storeRegInAfterIoImmMemAddr(cpu.A)
 
 	//store mem in reg
 	case 0x1a:
-		return c.storeMemIntoReg(c.GetDE(), &c.A)
+		return cpu.storeMemIntoReg(cpu.GetDE(), &cpu.A)
 
 		//store imm mem in reg
 	case 0xf0:
-		return c.storeAfterIoImm8MemAddrIntoReg(&c.A)
+		return cpu.storeAfterIoImm8MemAddrIntoReg(&cpu.A)
 
 	// store Reg in Reg
 	case 0x7b:
-		return c.storeValInReg(&c.A, c.E)
+		return cpu.storeValInReg(&cpu.A, cpu.E)
 	case 0x4f:
-		return c.storeValInReg(&c.C, c.A)
+		return cpu.storeValInReg(&cpu.C, cpu.A)
 	case 0x57:
-		return c.storeValInReg(&c.D, c.A)
+		return cpu.storeValInReg(&cpu.D, cpu.A)
 	case 0x67:
-		return c.storeValInReg(&c.H, c.A)
+		return cpu.storeValInReg(&cpu.H, cpu.A)
 	// push 16
 	case 0xf5:
-		return c.push16(&c.A, &c.F)
+		return cpu.push16(&cpu.A, &cpu.F)
 	case 0xc5:
-		return c.push16(&c.B, &c.C)
+		return cpu.push16(&cpu.B, &cpu.C)
 
 	// pop 16
 	case 0xc1:
-		return c.pop16(&c.B, &c.C)
+		return cpu.pop16(&cpu.B, &cpu.C)
 
 	// set ie
 	case 0xfb:
-		c.PC++
-		c.Memory.Io.SetIE(1)
+		cpu.PC++
+		cpu.Memory.Io.SetIE(1)
 		return 1
 	case 0xf3:
-		c.PC++
-		c.Memory.Io.SetIE(0)
+		cpu.PC++
+		cpu.Memory.Io.SetIE(0)
 		return 1
 
 	//compare imm to A
 	case 0xFE:
-		c.PC++
-		data, skip := c.Memory.ReadByteAt(c.PC)
-		c.PC += skip
-		c.SetZeroFlag((c.A - data) == 0)
-		c.SetSubFlag(true)
-		c.SetHalfCarryFlag(isHalfCarryFlagSubtraction(c.A, data))
-		c.SetCarryFlag(isCarryFlagSubtraction(c.A, data))
+		cpu.PC++
+		data, skip := cpu.Memory.ReadByteAt(cpu.PC)
+		cpu.PC += skip
+		cpu.SetZeroFlag((cpu.A - data) == 0)
+		cpu.SetSubFlag(true)
+		cpu.SetHalfCarryFlag(isHalfCarryFlagSubtraction(cpu.A, data))
+		cpu.SetCarryFlag(isCarryFlagSubtraction(cpu.A, data))
 		return 2
 	//RLA
 	//similiar to cbRegRotateLeft (other numBytes, numCycles and different flags)
 	case 0x17:
-		c.PC++
+		cpu.PC++
 		var newCarry bool
-		oldCarry := c.GetCarryFlag()
+		oldCarry := cpu.GetCarryFlag()
 
-		oldRegVal := c.A
-		c.A = oldRegVal << 1
+		oldRegVal := cpu.A
+		cpu.A = oldRegVal << 1
 
 		if oldCarry == 1 {
-			c.A |= 1
+			cpu.A |= 1
 		} else {
-			c.A &^= (1)
+			cpu.A &^= (1)
 		}
 
-		c.SetZeroFlag(false)
-		c.SetSubFlag(false)
-		c.SetHalfCarryFlag(false)
+		cpu.SetZeroFlag(false)
+		cpu.SetSubFlag(false)
+		cpu.SetHalfCarryFlag(false)
 		newCarry = ((oldRegVal >> 7 & 1) == 1)
-		c.SetCarryFlag(newCarry)
+		cpu.SetCarryFlag(newCarry)
 
 		return 1
 	default:
-		fmt.Printf("ERROR at PC 0x%04x: 0x%02x is not a recognized instruction!\n", c.PC, instr)
+		fmt.Printf("ERROR at PC 0x%04x: 0x%02x is not a recognized instruction!\n", cpu.PC, instr)
 		os.Exit(0)
 		return 0
 
 	}
 }
 
-func (c *Cpu) handleCB() (cycles uint64) {
+func (cpu *Cpu) handleCB() (cycles uint64) {
 
-	c.PC++
-	instr, numReadBytes := c.Memory.ReadByteAt(c.PC)
-	c.PC += numReadBytes
+	cpu.PC++
+	instr, numReadBytes := cpu.Memory.ReadByteAt(cpu.PC)
+	cpu.PC += numReadBytes
 
 	switch instr {
 	case 0x7c:
-		return c.cbSetZeroToComplementRegBit(&c.H, 7)
+		return cpu.cbSetZeroToComplementRegBit(&cpu.H, 7)
 	case 0x11:
-		return c.cbRegRotateLeft(&c.C)
+		return cpu.cbRegRotateLeft(&cpu.C)
 	default:
-		c.PC -= 2
-		fmt.Printf("ERROR at PC 0x%04x: 0xcb%02x is not a recognized instruction!\n", c.PC, instr)
+		cpu.PC -= 2
+		fmt.Printf("ERROR at PC 0x%04x: 0xcb%02x is not a recognized instruction!\n", cpu.PC, instr)
 		os.Exit(0)
 
 		return 0
 	}
 }
 
-func (c *Cpu) cbRegRotateLeft(regPtr *uint8) uint64 {
+func (cpu *Cpu) cbRegRotateLeft(regPtr *uint8) uint64 {
 	var oldRegVal uint8
-	var oldCarry = c.GetCarryFlag()
+	var oldCarry = cpu.GetCarryFlag()
 	var newCarry bool
 
 	oldRegVal = *regPtr
@@ -375,26 +308,26 @@ func (c *Cpu) cbRegRotateLeft(regPtr *uint8) uint64 {
 		*regPtr &^= (1)
 	}
 
-	c.SetZeroFlag(*regPtr == 0)
-	c.SetSubFlag(false)
-	c.SetHalfCarryFlag(false)
+	cpu.SetZeroFlag(*regPtr == 0)
+	cpu.SetSubFlag(false)
+	cpu.SetHalfCarryFlag(false)
 	newCarry = ((oldRegVal >> 7 & 1) == 1)
-	c.SetCarryFlag(newCarry)
+	cpu.SetCarryFlag(newCarry)
 
 	return 2
 }
-func (c *Cpu) cbSetZeroToComplementRegBit(regPtr *uint8, bitPos int) uint64 {
+func (cpu *Cpu) cbSetZeroToComplementRegBit(regPtr *uint8, bitPos int) uint64 {
 	var bit uint8
 
 	bit = *regPtr >> bitPos & 0x1
 
 	if bit == 0 {
-		c.SetZeroFlag(true)
+		cpu.SetZeroFlag(true)
 	} else {
-		c.SetZeroFlag(false)
+		cpu.SetZeroFlag(false)
 	}
-	c.SetSubFlag(false)
-	c.SetHalfCarryFlag(true)
+	cpu.SetSubFlag(false)
+	cpu.SetHalfCarryFlag(true)
 	return 2
 }
 
@@ -426,206 +359,206 @@ func isHalfCarryFlagAddition(valA uint8, valB uint8) bool {
 	return (lowerA + lowerB) > 0xF
 }
 
-func (c *Cpu) pop16(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles uint64) {
-	c.PC++
+func (cpu *Cpu) pop16(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles uint64) {
+	cpu.PC++
 
-	readLow, _ := c.Memory.ReadByteAt(c.SP)
+	readLow, _ := cpu.Memory.ReadByteAt(cpu.SP)
 	*lowerRegPtr = readLow
-	c.SP++
+	cpu.SP++
 
-	readHigh, _ := c.Memory.ReadByteAt(c.SP)
+	readHigh, _ := cpu.Memory.ReadByteAt(cpu.SP)
 	*higherRegPtr = readHigh
-	c.SP++
+	cpu.SP++
 
 	return 3
 }
 
-func (c *Cpu) push16(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles uint64) {
+func (cpu *Cpu) push16(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles uint64) {
 
-	c.PC++
+	cpu.PC++
 
-	c.SP--
-	c.Memory.SetValue(c.SP, *higherRegPtr)
-	c.SP--
-	c.Memory.SetValue(c.SP, *lowerRegPtr)
+	cpu.SP--
+	cpu.Memory.SetValue(cpu.SP, *higherRegPtr)
+	cpu.SP--
+	cpu.Memory.SetValue(cpu.SP, *lowerRegPtr)
 	return 4
 }
 
-func (c *Cpu) storeValInReg(regPtr *uint8, val uint8) (cycles uint64) {
-	c.PC++
+func (cpu *Cpu) storeValInReg(regPtr *uint8, val uint8) (cycles uint64) {
+	cpu.PC++
 	*regPtr = val
 	return 1
 }
 
 // In memory, push the program counter PC value corresponding to the address following the CALL instruction to the 2 bytes
-// following the byte specified by the current stack pointer SP. Then load the 16-bit immediate operand a16 into PC.
-func (c *Cpu) call16Imm() (cycles uint64) {
+// following the byte specified by the current stack pointer SP. Then load the 16-bit immediate operand a16 into Pcpu.
+func (cpu *Cpu) call16Imm() (cycles uint64) {
 
-	c.PC++
-	newPCAddr, bytesRead := c.Memory.Read16At(c.PC)
-	c.PC += bytesRead
+	cpu.PC++
+	newPCAddr, bytesRead := cpu.Memory.Read16At(cpu.PC)
+	cpu.PC += bytesRead
 
 	// With the push, the current value of SP is decremented by 1, and the higher-order byte of PC is loaded in the
 	// memory address specified by the new SP value. The value of SP is then decremented by 1 again, and the lower-order
 	//byte of PC is loaded in the memory address specified by that value of SP.
-	c.SP--
-	c.Memory.SetValue(c.SP, getHigher8(c.PC))
-	c.SP--
-	c.Memory.SetValue(c.SP, getLower8(c.PC)) // lower order byte of PC
+	cpu.SP--
+	cpu.Memory.SetValue(cpu.SP, getHigher8(cpu.PC))
+	cpu.SP--
+	cpu.Memory.SetValue(cpu.SP, getLower8(cpu.PC)) // lower order byte of PC
 
 	//The subroutine is placed after the location specified by the new PC value. When the subroutine finishes, control is
 	//returned to the source program using a return instruction and by popping the starting address of the next
-	//instruction (which was just pushed) and moving it to the PC.
+	//instruction (which was just pushed) and moving it to the Pcpu.
 
-	c.PC = newPCAddr
+	cpu.PC = newPCAddr
 	// The lower-order byte of a16 is placed in byte 2 of the object code, and the higher-order byte is placed in byte 3.
-	newPCAddrHigher := getHigher8(c.PC)
-	newPCAddrLower := getLower8(c.PC)
-	c.Memory.Oam[2] = newPCAddrLower
-	c.Memory.Oam[3] = newPCAddrHigher
+	newPCAddrHigher := getHigher8(cpu.PC)
+	newPCAddrLower := getLower8(cpu.PC)
+	cpu.Memory.Oam[2] = newPCAddrLower
+	cpu.Memory.Oam[3] = newPCAddrHigher
 
 	return 6
 }
 
-func (c *Cpu) storeMemIntoReg(address uint16, regPtr *uint8) (cycles uint64) {
+func (cpu *Cpu) storeMemIntoReg(address uint16, regPtr *uint8) (cycles uint64) {
 
-	val, bytesRead := c.Memory.ReadByteAt(address)
-	c.PC += bytesRead
+	val, bytesRead := cpu.Memory.ReadByteAt(address)
+	cpu.PC += bytesRead
 
 	*regPtr = val
 
 	return 2
 }
 
-func (c *Cpu) storeAfterIoImm8MemAddrIntoReg(regPtr *uint8) (cycles uint64) {
-	c.PC++
-	immData, skip := c.Memory.ReadByteAt(c.PC)
-	c.PC += skip
+func (cpu *Cpu) storeAfterIoImm8MemAddrIntoReg(regPtr *uint8) (cycles uint64) {
+	cpu.PC++
+	immData, skip := cpu.Memory.ReadByteAt(cpu.PC)
+	cpu.PC += skip
 
-	loadedFromMem, _ := c.Memory.ReadByteAt(IO_START_ADDR + uint16(immData))
+	loadedFromMem, _ := cpu.Memory.ReadByteAt(IO_START_ADDR + uint16(immData))
 
 	*regPtr = loadedFromMem
 
 	return 3
 }
 
-func (c *Cpu) storeRegInImmMemAddr(val uint8) (cycles uint64) {
-	c.PC++
-	a16, bytesRead := c.Memory.Read16At(c.PC)
-	c.PC += bytesRead
-	c.Memory.SetValue(a16, val)
+func (cpu *Cpu) storeRegInImmMemAddr(val uint8) (cycles uint64) {
+	cpu.PC++
+	a16, bytesRead := cpu.Memory.Read16At(cpu.PC)
+	cpu.PC += bytesRead
+	cpu.Memory.SetValue(a16, val)
 	return 4
 }
 
-func (c *Cpu) storeRegInAfterIoImmMemAddr(val uint8) (cycles uint64) {
-	c.PC++
-	a8, bytesRead := c.Memory.ReadByteAt(c.PC)
-	c.PC += bytesRead
-	c.Memory.SetValue(IO_START_ADDR+uint16(a8), val)
+func (cpu *Cpu) storeRegInAfterIoImmMemAddr(val uint8) (cycles uint64) {
+	cpu.PC++
+	a8, bytesRead := cpu.Memory.ReadByteAt(cpu.PC)
+	cpu.PC += bytesRead
+	cpu.Memory.SetValue(IO_START_ADDR+uint16(a8), val)
 	return 3
 }
 
-func (c *Cpu) jumpRelIf(cond bool) (cycles uint64) {
-	c.PC++
-	data, bytesRead := c.Memory.ReadByteAt(c.PC)
-	c.PC += bytesRead
+func (cpu *Cpu) jumpRelIf(cond bool) (cycles uint64) {
+	cpu.PC++
+	data, bytesRead := cpu.Memory.ReadByteAt(cpu.PC)
+	cpu.PC += bytesRead
 	if cond {
 		signedData := int8(data)
 
-		c.PC += uint16(signedData)
+		cpu.PC += uint16(signedData)
 		return 3
 	}
 	return 2
 
 }
-func (c *Cpu) decrementReg8(regPtr *uint8) (cycles uint64) {
+func (cpu *Cpu) decrementReg8(regPtr *uint8) (cycles uint64) {
 
 	oldRegVal := *regPtr
 	*regPtr = oldRegVal - 1
 
-	c.SetZeroFlag(*regPtr == 0)
-	c.SetSubFlag(true)
-	c.SetHalfCarryFlag(isHalfCarryFlagSubtraction(oldRegVal, 1))
+	cpu.SetZeroFlag(*regPtr == 0)
+	cpu.SetSubFlag(true)
+	cpu.SetHalfCarryFlag(isHalfCarryFlagSubtraction(oldRegVal, 1))
 
-	c.PC++
+	cpu.PC++
 	return 1
 }
 
-func (c *Cpu) incrementReg8(regPtr *uint8) (cycles uint64) {
+func (cpu *Cpu) incrementReg8(regPtr *uint8) (cycles uint64) {
 	oldRegVal := *regPtr
 	*regPtr = oldRegVal + 1
 
-	c.SetZeroFlag(*regPtr == 0)
-	c.SetSubFlag(false)
-	c.SetHalfCarryFlag(isHalfCarryFlagAddition(oldRegVal, 1))
+	cpu.SetZeroFlag(*regPtr == 0)
+	cpu.SetSubFlag(false)
+	cpu.SetHalfCarryFlag(isHalfCarryFlagAddition(oldRegVal, 1))
 
-	c.PC++
+	cpu.PC++
 	return 1
 }
 
-func (c *Cpu) incrementReg16(reg Reg16) (cycles uint64) {
-	c.PC++
+func (cpu *Cpu) incrementReg16(reg Reg16) (cycles uint64) {
+	cpu.PC++
 
 	switch reg {
 	case REG_AF:
-		c.SetAF(c.GetAF() + 1)
+		cpu.SetAF(cpu.GetAF() + 1)
 	case REG_BC:
-		c.SetBC(c.GetBC() + 1)
+		cpu.SetBC(cpu.GetBC() + 1)
 	case REG_DE:
-		c.SetDE(c.GetDE() + 1)
+		cpu.SetDE(cpu.GetDE() + 1)
 	case REG_HL:
-		c.SetHL(c.GetHL() + 1)
+		cpu.SetHL(cpu.GetHL() + 1)
 	default:
 		fmt.Printf("ERROR: Func %s, reg %s not Implemented!", "incrementReg16", reg.String())
 	}
 	return 2
 }
 
-func (c *Cpu) jump() (cycles uint64) {
-	c.PC, _ = c.Memory.Read16At(c.PC + 1)
+func (cpu *Cpu) jump() (cycles uint64) {
+	cpu.PC, _ = cpu.Memory.Read16At(cpu.PC + 1)
 	return 4
 }
 
-func (c *Cpu) storeRegInMemAddr(address uint16, toStore uint8) (cycles uint64) {
+func (cpu *Cpu) storeRegInMemAddr(address uint16, toStore uint8) (cycles uint64) {
 
-	c.Memory.SetValue(address, toStore)
+	cpu.Memory.SetValue(address, toStore)
 
-	c.PC++
+	cpu.PC++
 	return 2
 }
 
-func (c *Cpu) loadImm8IntoReg(regPtr *uint8) (cycles uint64) {
+func (cpu *Cpu) loadImm8IntoReg(regPtr *uint8) (cycles uint64) {
 	var skip uint16
 	var val uint8
-	c.PC++
-	val, skip = c.Memory.ReadByteAt(c.PC)
-	c.PC += skip
+	cpu.PC++
+	val, skip = cpu.Memory.ReadByteAt(cpu.PC)
+	cpu.PC += skip
 
 	*regPtr = val
 
 	return 2
 }
 
-func (c *Cpu) loadImm16Reg(reg *uint16) (cycles uint64) {
+func (cpu *Cpu) loadImm16Reg(reg *uint16) (cycles uint64) {
 	var skip uint16
 	var val uint16
 
-	c.PC++
-	val, skip = c.Memory.Read16At(c.PC)
-	c.PC += skip
+	cpu.PC++
+	val, skip = cpu.Memory.Read16At(cpu.PC)
+	cpu.PC += skip
 	*reg = val
 
 	return 3
 
 }
 
-func (c *Cpu) loadImm16Reg2Ptr(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles uint64) {
+func (cpu *Cpu) loadImm16Reg2Ptr(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles uint64) {
 	var skip uint16
 	var val uint16
 
-	c.PC++
-	val, skip = c.Memory.Read16At(c.PC)
-	c.PC += skip
+	cpu.PC++
+	val, skip = cpu.Memory.Read16At(cpu.PC)
+	cpu.PC += skip
 
 	*higherRegPtr = getHigher8(val)
 	*lowerRegPtr = getLower8(val)
@@ -634,16 +567,16 @@ func (c *Cpu) loadImm16Reg2Ptr(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles 
 
 }
 
-func (c *Cpu) xorReg(regPtr *uint8) (cycles uint64) {
+func (cpu *Cpu) xorReg(regPtr *uint8) (cycles uint64) {
 
 	*regPtr = 0
 
-	c.SetZeroFlag(true)
-	c.SetCarryFlag(false)
-	c.SetHalfCarryFlag(false)
-	c.SetSubFlag(false)
+	cpu.SetZeroFlag(true)
+	cpu.SetCarryFlag(false)
+	cpu.SetHalfCarryFlag(false)
+	cpu.SetSubFlag(false)
 
-	c.PC++
+	cpu.PC++
 	return 1
 
 }
@@ -664,114 +597,106 @@ func getLower4(orig uint8) uint8 {
 	return uint8(orig & 0x0f)
 }
 
-func (c *Cpu) DumpRegs() {
+func (cpu *Cpu) DumpRegs() {
 	fmt.Printf("Registers:\n\n")
-	fmt.Printf("A: 0x%02X\n", c.A)
-	fmt.Printf("F: 0x%02X\n", c.F)
-	fmt.Printf("B: 0x%02X\n", c.B)
-	fmt.Printf("C: 0x%02X\n", c.C)
-	fmt.Printf("D: 0x%02X\n", c.D)
-	fmt.Printf("E: 0x%02X\n", c.E)
-	fmt.Printf("H: 0x%02X\n", c.H)
-	fmt.Printf("L: 0x%02X\n", c.L)
-	fmt.Printf("SP: 0x%04X\n", c.SP)
-	fmt.Printf("PC: 0x%04X\n", c.PC)
+	fmt.Printf("A: 0x%02X\n", cpu.A)
+	fmt.Printf("F: 0x%02X\n", cpu.F)
+	fmt.Printf("B: 0x%02X\n", cpu.B)
+	fmt.Printf("C: 0x%02X\n", cpu.C)
+	fmt.Printf("D: 0x%02X\n", cpu.D)
+	fmt.Printf("E: 0x%02X\n", cpu.E)
+	fmt.Printf("H: 0x%02X\n", cpu.H)
+	fmt.Printf("L: 0x%02X\n", cpu.L)
+	fmt.Printf("SP: 0x%04X\n", cpu.SP)
+	fmt.Printf("PC: 0x%04X\n", cpu.PC)
 }
 
-func (c *Cpu) GetAF() uint16 {
-	return uint16(c.A)<<8 | uint16(c.F)
+func (cpu *Cpu) GetAF() uint16 {
+	return uint16(cpu.A)<<8 | uint16(cpu.F)
 }
 
-func (c *Cpu) GetBC() uint16 {
-	return uint16(c.B)<<8 | uint16(c.C)
+func (cpu *Cpu) GetBC() uint16 {
+	return uint16(cpu.B)<<8 | uint16(cpu.C)
 }
 
-func (c *Cpu) GetDE() uint16 {
-	return uint16(c.D)<<8 | uint16(c.E)
-
-}
-
-func (c *Cpu) GetHL() uint16 {
-	return uint16(c.H)<<8 | uint16(c.L)
+func (cpu *Cpu) GetDE() uint16 {
+	return uint16(cpu.D)<<8 | uint16(cpu.E)
 
 }
 
-func (c *Cpu) GetZeroFlag() uint8 { //z
-	return (c.F >> 0x7) & 0x1
-}
-
-func (c *Cpu) GetSubFlag() uint8 { //n
-	return (c.F >> 0x6) & 0x1
+func (cpu *Cpu) GetHL() uint16 {
+	return uint16(cpu.H)<<8 | uint16(cpu.L)
 
 }
 
-func (c *Cpu) GetHalfCarryFlag() uint8 { //h
-	return (c.F >> 0x5) & 0x1
+func (cpu *Cpu) GetZeroFlag() uint8 { //z
+	return (cpu.F >> 0x7) & 0x1
+}
+
+func (cpu *Cpu) GetSubFlag() uint8 { //n
+	return (cpu.F >> 0x6) & 0x1
 
 }
 
-func (c *Cpu) GetCarryFlag() uint8 { // c
-	return (c.F >> 0x4) & 0x1
+func (cpu *Cpu) GetHalfCarryFlag() uint8 { //h
+	return (cpu.F >> 0x5) & 0x1
+
+}
+
+func (cpu *Cpu) GetCarryFlag() uint8 { // c
+	return (cpu.F >> 0x4) & 0x1
 }
 
 //Setter
 
-func (c *Cpu) SetAF(value uint16) {
-	c.A = uint8(value >> 8)
-	c.F = uint8(value)
+func (cpu *Cpu) SetAF(value uint16) {
+	cpu.A = uint8(value >> 8)
+	cpu.F = uint8(value)
 }
 
-func (c *Cpu) SetBC(value uint16) {
-	c.B = uint8(value >> 8)
-	c.C = uint8(value)
+func (cpu *Cpu) SetBC(value uint16) {
+	cpu.B = uint8(value >> 8)
+	cpu.C = uint8(value)
 }
 
-func (c *Cpu) SetDE(value uint16) {
-	c.D = uint8(value >> 8)
-	c.E = uint8(value)
+func (cpu *Cpu) SetDE(value uint16) {
+	cpu.D = uint8(value >> 8)
+	cpu.E = uint8(value)
 }
 
-func (c *Cpu) SetHL(value uint16) {
-	c.H = uint8(value >> 8)
-	c.L = uint8(value)
+func (cpu *Cpu) SetHL(value uint16) {
+	cpu.H = uint8(value >> 8)
+	cpu.L = uint8(value)
 }
-func (c *Cpu) SetZeroFlag(cond bool) { //z
+func (cpu *Cpu) SetZeroFlag(cond bool) { //z
 	if cond {
-		c.SetAF(c.GetAF() | 1<<7)
+		cpu.SetAF(cpu.GetAF() | 1<<7)
 	} else {
-		c.SetAF(c.GetAF() &^ (1 << 7))
+		cpu.SetAF(cpu.GetAF() &^ (1 << 7))
 	}
 }
 
-func (c *Cpu) SetSubFlag(cond bool) { //n
+func (cpu *Cpu) SetSubFlag(cond bool) { //n
 	if cond {
-		c.SetAF(c.GetAF() | 1<<6)
+		cpu.SetAF(cpu.GetAF() | 1<<6)
 	} else {
-		c.SetAF(c.GetAF() &^ (1 << 6))
+		cpu.SetAF(cpu.GetAF() &^ (1 << 6))
 	}
 }
 
-func (c *Cpu) SetHalfCarryFlag(cond bool) { //h
+func (cpu *Cpu) SetHalfCarryFlag(cond bool) { //h
 
 	if cond {
-		c.SetAF(c.GetAF() | 1<<5)
+		cpu.SetAF(cpu.GetAF() | 1<<5)
 	} else {
-		c.SetAF(c.GetAF() &^ (1 << 5))
+		cpu.SetAF(cpu.GetAF() &^ (1 << 5))
 	}
 }
 
-func (c *Cpu) SetCarryFlag(cond bool) { // c
+func (cpu *Cpu) SetCarryFlag(cond bool) { // c
 	if cond {
-		c.SetAF(c.GetAF() | 1<<4)
+		cpu.SetAF(cpu.GetAF() | 1<<4)
 	} else {
-		c.SetAF(c.GetAF() &^ (1 << 4))
+		cpu.SetAF(cpu.GetAF() &^ (1 << 4))
 	}
-}
-
-func (c *Cpu) GetCurrentGame() []byte {
-	return c.currentGame.GetData()
-}
-
-func (c *Cpu) SetScreen(screen *Screen) {
-	c.screen = screen
 }

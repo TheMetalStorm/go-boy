@@ -1,17 +1,17 @@
 package main
 
 import (
-	"go-boy/cpu"
 	"go-boy/debugger"
+	"go-boy/emulator"
 	"os"
 
 	g "github.com/AllenDang/giu"
 )
 
-type Cpu = cpu.Cpu
+type Emulator = emulator.Emulator
 type Debugger = debugger.Debugger
 
-var c *cpu.Cpu = cpu.NewCpu()
+var e *Emulator = emulator.NewEmulator()
 
 func main() {
 
@@ -25,10 +25,10 @@ func main() {
 
 	}
 
-	c.Restart()
+	e.Restart()
 
 	dbg := debugger.NewDebugger()
-	dbg.SetCpu(c)
+	dbg.SetEmu(e)
 
 	if isDebugMode {
 		go func() {
@@ -37,7 +37,7 @@ func main() {
 		}()
 		dbg.RunCpu()
 	} else {
-		c.Run()
+		e.Run()
 	}
 
 }

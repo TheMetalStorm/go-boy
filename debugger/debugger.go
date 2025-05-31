@@ -2,14 +2,14 @@ package debugger
 
 import (
 	"fmt"
-	"go-boy/cpu"
+	"go-boy/emulator"
 	"image/color"
 	"slices"
 
 	g "github.com/AllenDang/giu"
 )
 
-type Cpu = cpu.Cpu
+type Emulator = emulator.Emulator
 
 type Debugger struct {
 	Autorun     bool
@@ -17,7 +17,7 @@ type Debugger struct {
 	breakpoints []uint16
 	LastBPHit   int
 
-	c *Cpu
+	e *Emulator
 }
 
 var splitPos float32 = 200
@@ -66,13 +66,13 @@ func (d *Debugger) onStepButton() {
 }
 
 func (d *Debugger) onRestartButton() {
-	d.c.Restart()
+	d.e.Restart()
 }
 
 func StartLoop(d *Debugger) func() {
 	return func() {
 		curSizeX, _ := g.SingleWindow().CurrentSize()
-		hramRows := makeHramTableFromSlice(d.c.Memory.Hram[:])
+		hramRows := makeHramTableFromSlice(d.e.Cpu.Memory.Hram[:])
 		slices.Reverse(hramRows)
 
 		regColumns := d.makeRegColumns()
@@ -97,48 +97,48 @@ func StartLoop(d *Debugger) func() {
 				g.TabBar().TabItems(
 
 					g.TabItem("Bank0").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRowsDebuggable(d.c.Memory.Bank0[:], 0)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRowsDebuggable(d.e.Cpu.Memory.Bank0[:], 0)...),
 					),
 
 					g.TabItem("BankN").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRowsDebuggable(d.c.Memory.Bank1[:], 0x4000)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRowsDebuggable(d.e.Cpu.Memory.Bank1[:], 0x4000)...),
 					),
 
 					g.TabItem("Vram").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.c.Memory.Vram[:], 0x8000)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.Vram[:], 0x8000)...),
 					),
 
 					g.TabItem("Extram").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.c.Memory.Extram[:], 0xa000)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.Extram[:], 0xa000)...),
 					),
 
 					g.TabItem("Wram1").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.c.Memory.Wram1[:], 0xc000)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.Wram1[:], 0xc000)...),
 					),
 
 					g.TabItem("Wram2").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.c.Memory.Wram2[:], 0xd000)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.Wram2[:], 0xd000)...),
 					),
 
 					g.TabItem("Oam").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.c.Memory.Oam[:], 0xfe00)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.Oam[:], 0xfe00)...),
 					),
 
 					// Todo better view for Io with description
 					g.TabItem("Io").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.c.Memory.Io.Regs[:], 0xff00)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.Io.Regs[:], 0xff00)...),
 					),
 
 					g.TabItem("Hram").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.c.Memory.Hram[:], 0xff80)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.Hram[:], 0xff80)...),
 					),
 
 					g.TabItem("Ie").Layout(
-						g.Labelf("0xFFFF: %02x", d.c.Memory.Ie),
+						g.Labelf("0xFFFF: %02x", d.e.Cpu.Memory.Ie),
 					),
 
 					g.TabItem("Game Code").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.c.GetCurrentGame(), 0)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.GetCurrentGame(), 0)...),
 					),
 				),
 			),
@@ -262,7 +262,7 @@ func (d *Debugger) makeHexRowCellDebugabble(slice []uint8, regionOffset uint32, 
 }
 
 func (d *Debugger) isCurrentPC(addr uint16) bool {
-	return d.c.PC == addr
+	return d.e.Cpu.PC == addr
 }
 
 func (d *Debugger) isInDebug(addr uint16) bool {
@@ -279,24 +279,24 @@ func (d *Debugger) OnClickMemView(addr uint16) func() {
 
 func (d *Debugger) makeRegColumns() []*g.TableColumnWidget {
 	regColumns := make([]*g.TableColumnWidget, 11)
-	regColumns[0] = g.TableColumn(fmt.Sprintf("PC: 0x%04x", d.c.PC))
-	regColumns[1] = g.TableColumn(fmt.Sprintf("SP: 0x%04x", d.c.SP))
-	regColumns[2] = g.TableColumn(fmt.Sprintf("A: 0x%02x", d.c.A))
-	regColumns[3] = g.TableColumn(fmt.Sprintf("F: 0x%02x", d.c.F))
-	regColumns[4] = g.TableColumn(fmt.Sprintf("B: 0x%02x", d.c.B))
-	regColumns[5] = g.TableColumn(fmt.Sprintf("C: 0x%02x", d.c.C))
-	regColumns[6] = g.TableColumn(fmt.Sprintf("D: 0x%02x", d.c.D))
-	regColumns[7] = g.TableColumn(fmt.Sprintf("E: 0x%02x", d.c.E))
-	regColumns[8] = g.TableColumn(fmt.Sprintf("H: 0x%02x", d.c.H))
-	regColumns[9] = g.TableColumn(fmt.Sprintf("L: 0x%02x", d.c.L))
-	clk, _ := d.c.Memory.ReadByteAt(0xFF04)
+	regColumns[0] = g.TableColumn(fmt.Sprintf("PC: 0x%04x", d.e.Cpu.PC))
+	regColumns[1] = g.TableColumn(fmt.Sprintf("SP: 0x%04x", d.e.Cpu.SP))
+	regColumns[2] = g.TableColumn(fmt.Sprintf("A: 0x%02x", d.e.Cpu.A))
+	regColumns[3] = g.TableColumn(fmt.Sprintf("F: 0x%02x", d.e.Cpu.F))
+	regColumns[4] = g.TableColumn(fmt.Sprintf("B: 0x%02x", d.e.Cpu.B))
+	regColumns[5] = g.TableColumn(fmt.Sprintf("C: 0x%02x", d.e.Cpu.C))
+	regColumns[6] = g.TableColumn(fmt.Sprintf("D: 0x%02x", d.e.Cpu.D))
+	regColumns[7] = g.TableColumn(fmt.Sprintf("E: 0x%02x", d.e.Cpu.E))
+	regColumns[8] = g.TableColumn(fmt.Sprintf("H: 0x%02x", d.e.Cpu.H))
+	regColumns[9] = g.TableColumn(fmt.Sprintf("L: 0x%02x", d.e.Cpu.L))
+	clk, _ := d.e.Cpu.Memory.ReadByteAt(0xFF04)
 	regColumns[10] = g.TableColumn(fmt.Sprintf("CLK: 0x%02x", clk))
 	return regColumns
 }
 
-func (d *Debugger) SetCpu(curCpu *Cpu) {
+func (d *Debugger) SetEmu(emu *Emulator) {
 	d.reset()
-	d.c = curCpu
+	d.e = emu
 }
 
 func (d *Debugger) StartDebugger() {
@@ -306,18 +306,18 @@ func (d *Debugger) StartDebugger() {
 func (d *Debugger) RunCpu() {
 	for {
 		if d.Autorun {
-			if slices.Contains(d.GetBreakpoints(), d.c.PC) && d.c.PC != uint16(d.LastBPHit) {
+			if slices.Contains(d.GetBreakpoints(), d.e.Cpu.PC) && d.e.Cpu.PC != uint16(d.LastBPHit) {
 				d.Autorun = false
-				d.LastBPHit = int(d.c.PC)
+				d.LastBPHit = int(d.e.Cpu.PC)
 			} else {
 				d.LastBPHit = -1
 
-				d.c.Step()
+				d.e.Step()
 			}
 		} else {
 			if d.DoStep {
 				d.LastBPHit = -1
-				d.c.Step()
+				d.e.Step()
 				d.DoStep = false
 			}
 		}
