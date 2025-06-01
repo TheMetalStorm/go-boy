@@ -56,7 +56,7 @@ func (m *Mmap) SetValue(address uint16, value uint8) {
 		m.Nu[address-0xFEA0] = value
 
 	case address < 0xFF80:
-		m.Hram[address-0xFF00] = value
+		m.Io.Regs[address-0xFF00] = value
 
 	case address < 0xFFFF:
 		m.Hram[address-0xFF80] = value
@@ -160,7 +160,7 @@ func (m *Mmap) ReadByteAt(address uint16) (val uint8, bytesRead uint16) {
 		return m.Nu[address-0xFEA0], 1
 
 	case address < 0xFF80:
-		return m.Hram[address-0xFF00], 1
+		return m.Io.Regs[address-0xFF00], 1
 
 	case address < 0xFFFF:
 		return m.Hram[address-0xFF80], 1

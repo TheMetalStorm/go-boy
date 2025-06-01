@@ -23,7 +23,7 @@ type Emulator struct {
 	screen      *Screen
 	currentGame *Rom
 
-	ranMCyclesThisFrame uint64
+	RanMCyclesThisFrame uint64
 }
 
 func NewEmulator() *Emulator {
@@ -35,7 +35,7 @@ func NewEmulator() *Emulator {
 
 func (e *Emulator) Restart() {
 	e.Cpu.Restart()
-	e.ranMCyclesThisFrame = 0
+	e.RanMCyclesThisFrame = 0
 
 	e.currentGame = rom.NewRom("./games/tetris.gb")
 	e.LoadRom(e.currentGame)
@@ -64,7 +64,7 @@ func (e *Emulator) Step() {
 	e.updateTimers(ranMCyclesThisStep)
 
 	//e.refreshScreen()
-	e.ranMCyclesThisFrame += ranMCyclesThisStep
+	e.RanMCyclesThisFrame += ranMCyclesThisStep
 
 }
 
@@ -122,9 +122,10 @@ func (e *Emulator) updateTimers(mCyclesThisStep uint64) {
 // https://gbdev.gg8.se/wiki/articles/Timer_and_Divider_Registers
 func (e *Emulator) updateDivReg(mCyclesThisStep uint64) {
 	// if we crossed the 64 M Cycles boundary this Step
-	if (e.ranMCyclesThisFrame-mCyclesThisStep)%64 != e.ranMCyclesThisFrame%64 {
-		read, _ := e.Cpu.Memory.ReadByteAt(0xFF04)
-		e.Cpu.Memory.SetValue(0xFF04, read+1)
+	if (int(e.RanMCyclesThisFrame+mCyclesThisStep) / 64) != int(e.RanMCyclesThisFrame/64) {
+
+		div := e.Cpu.Memory.Io.GetDIV()
+		e.Cpu.Memory.SetValue(0xFF04, div+1)
 	}
 }
 
@@ -137,17 +138,18 @@ func (e *Emulator) updateTimaReg(mCyclesThisStep uint64) {
 	if timerEnabled {
 		switch timerControl & 0x03 {
 		case 0x00: // 00
-			updatFreq = 4
-		case 0x01: // 01
 			updatFreq = 256
+		case 0x01: // 01
+			updatFreq = 4
 		case 0x02: // 10
-			updatFreq = 64
-		case 0x03: // 11
 			updatFreq = 16
+		case 0x03: // 11
+			updatFreq = 64
 		}
 
-		if (e.ranMCyclesThisFrame-mCyclesThisStep)%updatFreq != e.ranMCyclesThisFrame%updatFreq {
-			tima++
+		if int(e.RanMCyclesThisFrame+mCyclesThisStep)/int(updatFreq) != int(int(e.RanMCyclesThisFrame)/int(updatFreq)) {
+			incr := int(e.RanMCyclesThisFrame+mCyclesThisStep)/int(updatFreq) - int(int(e.RanMCyclesThisFrame)/int(updatFreq))
+			tima += uint16(incr)
 			if tima > 255 { //tima overflow
 				tima = uint16(e.Cpu.Memory.Io.GetTMA())
 				e.Cpu.Memory.Io.SetInterruptFlagBit(ioregs.TIMER, true)
