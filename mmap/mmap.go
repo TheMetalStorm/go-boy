@@ -22,7 +22,7 @@ type Mmap struct {
 	Nu   [0x60]uint8 //not usable
 	Io   Ioregs      // I/O Reg
 	Hram [0x7f]uint8 //high ram
-	Ie   uint8       //interruot enable reg
+	Ie   uint8       //interrupt enable reg
 }
 
 func (m *Mmap) SetValue(address uint16, value uint8) {
@@ -66,56 +66,6 @@ func (m *Mmap) SetValue(address uint16, value uint8) {
 	}
 
 }
-
-// func (m *Mmap) Read16At(address uint16) (data uint16, numReadBytes uint16) {
-// 	switch {
-// 	case address < 0x4000:
-// 		a1 := uint16(m.Bank0[address])
-// 		a2 := uint16(m.Bank0[address+1])
-// 		return uint16(a1 | a2<<8), 2
-// 	case address < 0x8000:
-// 		a1 := uint16(m.Bank1[address-0x4000])
-// 		a2 := uint16(m.Bank1[address-0x4000+1])
-// 		return uint16(a1 | a2<<8), 2
-// 	case address < 0xa000:
-// 		a1 := uint16(m.Vram[address-0x8000])
-// 		a2 := uint16(m.Vram[address-0x8000+1])
-// 		return uint16(a1 | a2<<8), 2
-// 	case address < 0xc000:
-// 		a1 := uint16(m.Extram[address-0xa000])
-// 		a2 := uint16(m.Extram[address-0xa000+1])
-// 		return uint16(a1 | a2<<8), 2
-// 	case address < 0xd000:
-// 		a1 := uint16(m.Wram1[address-0xc000])
-// 		a2 := uint16(m.Wram1[address-0xc000+1])
-// 		return uint16(a1 | a2<<8), 2
-// 	case address < 0xe000:
-// 		a1 := uint16(m.Wram2[address-0xd000])
-// 		a2 := uint16(m.Wram2[address-0xd000+1])
-// 		return uint16(a1 | a2<<8), 2
-// 	case address < 0xfe00:
-// 		a1 := uint16(m.Echoram[address-0xe000])
-// 		a2 := uint16(m.Echoram[address-0xe000+1])
-// 		return uint16(a1 | a2<<8), 2
-// 	case address < 0xff00:
-// 		a1 := uint16(m.Oam[address-0xfe00])
-// 		a2 := uint16(m.Oam[address-0xfe00+1])
-// 		return uint16(a1 | a2<<8), 2
-// 	case address < 0xff80:
-// 		a1 := uint16(m.Nu[address-0xff00])
-// 		a2 := uint16(m.Nu[address-0xff00+1])
-// 		return uint16(a1 | a2<<8), 2
-// 	case address < 0xfffe:
-// 		a1 := uint16(m.Io.Regs[address-0xff80])
-// 		a2 := uint16(m.Io.Regs[address-0xff80+1])
-// 		return uint16(a1 | a2<<8), 2
-// 	case address == 0xfffe:
-// 		a1 := uint16(m.Hram[address-0xff80])
-// 		a2 := uint16(m.Hram[address-0xff80+1])
-// 		return uint16(a1 | a2<<8), 2
-// 	}
-// 	return 0, 2
-// }
 
 func (m *Mmap) Read16At(address uint16) (data uint16, numReadBytes uint16) {
 
@@ -219,6 +169,24 @@ func (m *Mmap) ReadByteAt(address uint16) (val uint8, bytesRead uint16) {
 		return m.Ie, 1
 	}
 	return 0, 0
+}
+
+func (m *Mmap) SetInterruptEnabledBit(bit ioregs.InterruptFlags, cond bool) {
+	if cond {
+		m.Ie |= (1 << bit)
+	} else {
+		m.Ie &^= (1 << bit)
+	}
+}
+
+func (m *Mmap) GetInterruptEnabledBit(bit ioregs.InterruptFlags) bool {
+	ie := m.Ie
+	sisSet := (ie >> bit) & 0x1
+	if sisSet == 1 {
+		return true
+	} else {
+		return false
+	}
 }
 
 // Dump

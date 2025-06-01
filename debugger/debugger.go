@@ -303,7 +303,7 @@ func (d *Debugger) StartDebugger() {
 
 }
 
-func (d *Debugger) RunCpu() {
+func (d *Debugger) RunEmulator() {
 	for {
 		if d.Autorun {
 			if slices.Contains(d.GetBreakpoints(), d.e.Cpu.PC) && d.e.Cpu.PC != uint16(d.LastBPHit) {

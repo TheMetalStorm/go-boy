@@ -8,7 +8,6 @@ import (
 )
 
 type Mmap = mmap.Mmap
-
 type Cpu struct {
 	A uint8
 	F uint8
@@ -23,6 +22,8 @@ type Cpu struct {
 	PC uint16
 
 	Memory *Mmap
+
+	IME bool
 }
 
 var IO_START_ADDR uint16 = 0xff00
@@ -84,7 +85,7 @@ func (cpu *Cpu) Restart() {
 
 func (cpu *Cpu) Step() uint64 {
 	instr, _ := cpu.Memory.ReadByteAt(cpu.PC)
-	var ranMCyclesThisStep uint64 = 4 //instr fetch (and decode i guess) takes 4 (machine?) cycles
+	var ranMCyclesThisStep uint64 = 1 //instr fetch  takes 1 m cycles
 	//decode/Execute
 	ranMCyclesThisStep += cpu.decodeExecute(instr)
 	return ranMCyclesThisStep
@@ -224,16 +225,31 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0xc1:
 		return cpu.pop16(&cpu.B, &cpu.C)
 
-	// set ie
+	// ie
 	case 0xfb:
 		cpu.PC++
-		cpu.Memory.Io.SetIE(1)
+		cpu.IME = true
 		return 1
 	case 0xf3:
 		cpu.PC++
-		cpu.Memory.Io.SetIE(0)
+		cpu.IME = false
 		return 1
+	case 0xd9:
+		cpu.PC++
 
+		readLow, _ := cpu.Memory.ReadByteAt(cpu.SP)
+		cpu.SP++
+
+		readHigh, _ := cpu.Memory.ReadByteAt(cpu.SP)
+		cpu.SP++
+
+		newPC := (uint16(readLow) | uint16(readHigh)<<8)
+
+		cpu.PC = newPC
+
+		cpu.IME = true
+
+		return 4
 	//compare imm to A
 	case 0xFE:
 		cpu.PC++
@@ -402,9 +418,9 @@ func (cpu *Cpu) call16Imm() (cycles uint64) {
 	// memory address specified by the new SP value. The value of SP is then decremented by 1 again, and the lower-order
 	//byte of PC is loaded in the memory address specified by that value of SP.
 	cpu.SP--
-	cpu.Memory.SetValue(cpu.SP, getHigher8(cpu.PC))
+	cpu.Memory.SetValue(cpu.SP, GetHigher8(cpu.PC))
 	cpu.SP--
-	cpu.Memory.SetValue(cpu.SP, getLower8(cpu.PC)) // lower order byte of PC
+	cpu.Memory.SetValue(cpu.SP, GetLower8(cpu.PC)) // lower order byte of PC
 
 	//The subroutine is placed after the location specified by the new PC value. When the subroutine finishes, control is
 	//returned to the source program using a return instruction and by popping the starting address of the next
@@ -412,8 +428,8 @@ func (cpu *Cpu) call16Imm() (cycles uint64) {
 
 	cpu.PC = newPCAddr
 	// The lower-order byte of a16 is placed in byte 2 of the object code, and the higher-order byte is placed in byte 3.
-	newPCAddrHigher := getHigher8(cpu.PC)
-	newPCAddrLower := getLower8(cpu.PC)
+	newPCAddrHigher := GetHigher8(cpu.PC)
+	newPCAddrLower := GetLower8(cpu.PC)
 	cpu.Memory.Oam[2] = newPCAddrLower
 	cpu.Memory.Oam[3] = newPCAddrHigher
 
@@ -560,8 +576,8 @@ func (cpu *Cpu) loadImm16Reg2Ptr(higherRegPtr *uint8, lowerRegPtr *uint8) (cycle
 	val, skip = cpu.Memory.Read16At(cpu.PC)
 	cpu.PC += skip
 
-	*higherRegPtr = getHigher8(val)
-	*lowerRegPtr = getLower8(val)
+	*higherRegPtr = GetHigher8(val)
+	*lowerRegPtr = GetLower8(val)
 
 	return 3
 
@@ -581,11 +597,11 @@ func (cpu *Cpu) xorReg(regPtr *uint8) (cycles uint64) {
 
 }
 
-func getHigher8(orig uint16) uint8 {
+func GetHigher8(orig uint16) uint8 {
 	return uint8(orig >> 8 & 0xFF)
 }
 
-func getLower8(orig uint16) uint8 {
+func GetLower8(orig uint16) uint8 {
 	return uint8(orig)
 }
 

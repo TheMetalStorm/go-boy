@@ -35,7 +35,7 @@ func main() {
 			wnd := g.NewMasterWindow("GB Debugger", 800, 800, g.MasterWindowFlagsMaximized)
 			wnd.Run(debugger.StartLoop(dbg))
 		}()
-		dbg.RunCpu()
+		dbg.RunEmulator()
 	} else {
 		e.Run()
 	}

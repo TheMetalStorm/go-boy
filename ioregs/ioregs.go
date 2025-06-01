@@ -1,6 +1,21 @@
 package ioregs
 
-import "fmt"
+import (
+	"fmt"
+)
+
+type InterruptFlags uint8
+
+const (
+	VBLANK InterruptFlags = iota
+	LCD
+	TIMER
+	SERIAL
+	JOYPAD
+	UNNUSED1
+	UNNUSED2
+	UNNUSED3
+)
 
 type Ioregs struct {
 	Regs [0x80]uint8
@@ -38,8 +53,10 @@ func (i *Ioregs) GetDIV() uint8 {
 	return i.Regs[0x04]
 }
 
+// This register is incremented at rate of 16384Hz (~16779Hz on SGB). Writing any value to this register resets it to 00h.
+// https://gbdev.io/pandocs/Timer_and_Divider_Registers.html
 func (i *Ioregs) SetDIV(value uint8) {
-	i.Regs[0x04] = value
+	i.Regs[0x04] = 0
 }
 
 func (i *Ioregs) GetTIMA() uint8 {
@@ -66,6 +83,7 @@ func (i *Ioregs) SetTAC(value uint8) {
 	i.Regs[0x07] = value
 }
 
+// Interrupt Requested
 func (i *Ioregs) GetIF() uint8 {
 	return i.Regs[0x0F]
 }
@@ -426,12 +444,24 @@ func (i *Ioregs) GetPCM34() uint8 {
 	return i.Regs[0x77]
 }
 
-func (i *Ioregs) GetIE() uint8 {
-	return i.Regs[0x7F]
+func (i *Ioregs) SetInterruptFlagBit(bit InterruptFlags, cond bool) {
+	intf := i.GetIF()
+
+	if cond {
+		i.SetIF(intf | (1 << bit))
+	} else {
+		i.SetIF(intf &^ (1 << bit))
+	}
 }
 
-func (i *Ioregs) SetIE(value uint8) {
-	i.Regs[0x7F] = value
+func (i *Ioregs) GetInterruptFlagBit(bit InterruptFlags) bool {
+	intf := i.GetIF()
+	isSet := (intf >> bit) & 0x1
+	if isSet == 1 {
+		return true
+	} else {
+		return false
+	}
 }
 
 // Dump
