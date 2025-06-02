@@ -40,7 +40,7 @@ func (d *Debugger) GetBreakpoints() []uint16 {
 }
 
 func (d *Debugger) ToggleBP(addr uint16) {
-	//No point in setting BP on Mem Adress 0
+	//No point in setting BP on Mem Adress 0 since we start here with Autorun == false
 	if addr == 0 {
 		return
 	}
