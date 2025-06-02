@@ -12,10 +12,10 @@ import (
 type Emulator = emulator.Emulator
 
 type Debugger struct {
-	Autorun     bool
-	DoStep      bool
+	autorun     bool
+	doStep      bool
 	breakpoints []uint16
-	LastBPHit   int
+	lastBPHit   int
 
 	e *Emulator
 }
@@ -29,9 +29,9 @@ func NewDebugger() *Debugger {
 }
 
 func (d *Debugger) reset() {
-	d.Autorun = false
-	d.DoStep = false
-	d.LastBPHit = -1
+	d.autorun = false
+	d.doStep = false
+	d.lastBPHit = -1
 	d.breakpoints = nil
 }
 
@@ -54,18 +54,19 @@ func (d *Debugger) ToggleBP(addr uint16) {
 }
 
 func (d *Debugger) onStartButton() {
-	d.Autorun = true
+	d.autorun = true
 }
 
 func (d *Debugger) onStopButton() {
-	d.Autorun = false
+	d.autorun = false
 }
 
 func (d *Debugger) onStepButton() {
-	d.DoStep = true
+	d.doStep = true
 }
 
 func (d *Debugger) onRestartButton() {
+	d.autorun = false
 	d.e.Restart()
 }
 
@@ -97,31 +98,31 @@ func StartLoop(d *Debugger) func() {
 				g.TabBar().TabItems(
 
 					g.TabItem("Bank0").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRowsDebuggable(d.e.Cpu.Memory.Bank0[:], 0)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRowsDebuggable(d.e.Cpu.Memory.GetBank0(), 0)...),
 					),
 
 					g.TabItem("BankN").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRowsDebuggable(d.e.Cpu.Memory.Bank1[:], 0x4000)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRowsDebuggable(d.e.Cpu.Memory.GetBank1(), 0x4000)...),
 					),
 
 					g.TabItem("Vram").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.Vram[:], 0x8000)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.GetVram(), 0x8000)...),
 					),
 
 					g.TabItem("Extram").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.Extram[:], 0xa000)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.GetExtram(), 0xa000)...),
 					),
 
 					g.TabItem("Wram1").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.Wram1[:], 0xc000)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.GetWram1(), 0xc000)...),
 					),
 
 					g.TabItem("Wram2").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.Wram2[:], 0xd000)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.GetWram2(), 0xd000)...),
 					),
 
 					g.TabItem("Oam").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.Oam[:], 0xfe00)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.GetOam(), 0xfe00)...),
 					),
 
 					// Todo better view for Io with description
@@ -130,7 +131,7 @@ func StartLoop(d *Debugger) func() {
 					),
 
 					g.TabItem("Hram").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.Hram[:], 0xff80)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.GetHram(), 0xff80)...),
 					),
 
 					g.TabItem("Ie").Layout(
@@ -310,20 +311,20 @@ func (d *Debugger) StartDebugger() {
 
 func (d *Debugger) RunEmulator() {
 	for {
-		if d.Autorun {
-			if slices.Contains(d.GetBreakpoints(), d.e.Cpu.PC) && d.e.Cpu.PC != uint16(d.LastBPHit) {
-				d.Autorun = false
-				d.LastBPHit = int(d.e.Cpu.PC)
+		if d.autorun {
+			if slices.Contains(d.GetBreakpoints(), d.e.Cpu.PC) && d.e.Cpu.PC != uint16(d.lastBPHit) {
+				d.autorun = false
+				d.lastBPHit = int(d.e.Cpu.PC)
 			} else {
-				d.LastBPHit = -1
+				d.lastBPHit = -1
 
 				d.e.Step()
 			}
 		} else {
-			if d.DoStep {
-				d.LastBPHit = -1
+			if d.doStep {
+				d.lastBPHit = -1
 				d.e.Step()
-				d.DoStep = false
+				d.doStep = false
 			}
 		}
 	}

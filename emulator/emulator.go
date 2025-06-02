@@ -23,7 +23,7 @@ type Emulator struct {
 	screen      *Screen
 	currentGame *Rom
 
-	RanMCyclesThisFrame uint64
+	ranMCyclesThisFrame uint64
 }
 
 func NewEmulator() *Emulator {
@@ -35,7 +35,7 @@ func NewEmulator() *Emulator {
 
 func (e *Emulator) Restart() {
 	e.Cpu.Restart()
-	e.RanMCyclesThisFrame = 0
+	e.ranMCyclesThisFrame = 0
 
 	e.currentGame = rom.NewRom("./games/tetris.gb")
 	e.LoadRom(e.currentGame)
@@ -64,7 +64,7 @@ func (e *Emulator) Step() {
 	e.updateTimers(ranMCyclesThisStep)
 
 	//e.refreshScreen()
-	e.RanMCyclesThisFrame += ranMCyclesThisStep
+	e.ranMCyclesThisFrame += ranMCyclesThisStep
 
 }
 
@@ -122,7 +122,7 @@ func (e *Emulator) updateTimers(mCyclesThisStep uint64) {
 // https://gbdev.gg8.se/wiki/articles/Timer_and_Divider_Registers
 func (e *Emulator) updateDivReg(mCyclesThisStep uint64) {
 	// if we crossed the 64 M Cycles boundary this Step
-	if (int(e.RanMCyclesThisFrame+mCyclesThisStep) / 64) != int(e.RanMCyclesThisFrame/64) {
+	if (int(e.ranMCyclesThisFrame+mCyclesThisStep) / 64) != int(e.ranMCyclesThisFrame/64) {
 
 		div := e.Cpu.Memory.Io.GetDIV()
 		e.Cpu.Memory.SetValue(0xFF04, div+1)
@@ -147,8 +147,8 @@ func (e *Emulator) updateTimaReg(mCyclesThisStep uint64) {
 			updatFreq = 64
 		}
 
-		if int(e.RanMCyclesThisFrame+mCyclesThisStep)/int(updatFreq) != int(int(e.RanMCyclesThisFrame)/int(updatFreq)) {
-			incr := int(e.RanMCyclesThisFrame+mCyclesThisStep)/int(updatFreq) - int(int(e.RanMCyclesThisFrame)/int(updatFreq))
+		if int(e.ranMCyclesThisFrame+mCyclesThisStep)/int(updatFreq) != int(int(e.ranMCyclesThisFrame)/int(updatFreq)) {
+			incr := int(e.ranMCyclesThisFrame+mCyclesThisStep)/int(updatFreq) - int(int(e.ranMCyclesThisFrame)/int(updatFreq))
 			tima += uint16(incr)
 			if tima > 255 { //tima overflow
 				tima = uint16(e.Cpu.Memory.Io.GetTMA())
