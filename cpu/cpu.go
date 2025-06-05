@@ -256,7 +256,121 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 
 		return 4
 
-		// xor Reg
+	// add to A Reg
+	case 0x80:
+		return cpu.addToRegA(cpu.B)
+	case 0x81:
+		return cpu.addToRegA(cpu.C)
+	case 0x82:
+		return cpu.addToRegA(cpu.D)
+	case 0x83:
+		return cpu.addToRegA(cpu.E)
+	case 0x84:
+		return cpu.addToRegA(cpu.H)
+	case 0x85:
+		return cpu.addToRegA(cpu.L)
+	case 0x86:
+		oldVal := cpu.A
+		addVal, skip := cpu.Memory.ReadByteAt(cpu.GetHL())
+		cpu.A += addVal
+		cpu.PC += skip
+
+		cpu.SetZeroFlag(cpu.A == 0)
+		cpu.SetSubFlag(false)
+		cpu.SetCarryFlag(isCarryFlagAddition(oldVal, addVal))
+		cpu.SetHalfCarryFlag(isHalfCarryFlagAddition(oldVal, addVal))
+
+		return 2
+	case 0x87:
+		return cpu.addToRegA(cpu.A)
+	// END add to A Reg
+
+	// sub from A Reg
+	case 0x90:
+		return cpu.subFromRegA(cpu.B)
+	case 0x91:
+		return cpu.subFromRegA(cpu.C)
+	case 0x92:
+		return cpu.subFromRegA(cpu.D)
+	case 0x93:
+		return cpu.subFromRegA(cpu.E)
+	case 0x94:
+		return cpu.subFromRegA(cpu.H)
+	case 0x95:
+		return cpu.subFromRegA(cpu.L)
+	case 0x96:
+		oldVal := cpu.A
+		subVal, skip := cpu.Memory.ReadByteAt(cpu.GetHL())
+		cpu.A -= subVal
+		cpu.PC += skip
+
+		cpu.SetZeroFlag(cpu.A == 0)
+		cpu.SetSubFlag(true)
+		cpu.SetCarryFlag(isCarryFlagSubtraction(oldVal, subVal))
+		cpu.SetHalfCarryFlag(isHalfCarryFlagSubtraction(oldVal, subVal))
+
+		return 2
+	case 0x97:
+		return cpu.subFromRegA(cpu.A)
+	// END sub from A Reg
+
+	// bin and with A Reg
+	case 0xa0:
+		return cpu.binAndWithRegA(cpu.B)
+	case 0xa1:
+		return cpu.binAndWithRegA(cpu.C)
+	case 0xa2:
+		return cpu.binAndWithRegA(cpu.D)
+	case 0xa3:
+		return cpu.binAndWithRegA(cpu.E)
+	case 0xa4:
+		return cpu.binAndWithRegA(cpu.H)
+	case 0xa5:
+		return cpu.binAndWithRegA(cpu.L)
+	case 0xa6:
+		andVal, skip := cpu.Memory.ReadByteAt(cpu.GetHL())
+		cpu.A &= andVal
+		cpu.PC += skip
+
+		cpu.SetZeroFlag(cpu.A == 0)
+		cpu.SetSubFlag(false)
+		cpu.SetHalfCarryFlag(true)
+		cpu.SetCarryFlag(false)
+
+		return 2
+	case 0xa7:
+		return cpu.binAndWithRegA(cpu.A)
+	// END bin and with A Reg
+
+	// bin or with A Reg
+	case 0xb0:
+		return cpu.binOrWithRegA(cpu.B)
+	case 0xb1:
+		return cpu.binOrWithRegA(cpu.C)
+	case 0xb2:
+		return cpu.binOrWithRegA(cpu.D)
+	case 0xb3:
+		return cpu.binOrWithRegA(cpu.E)
+	case 0xb4:
+		return cpu.binOrWithRegA(cpu.H)
+	case 0xb5:
+		return cpu.binOrWithRegA(cpu.L)
+	case 0xb6:
+		orVal, skip := cpu.Memory.ReadByteAt(cpu.GetHL())
+		cpu.A |= orVal
+		cpu.PC += skip
+
+		cpu.SetZeroFlag(cpu.A == 0)
+		cpu.SetSubFlag(false)
+		cpu.SetHalfCarryFlag(false)
+		cpu.SetCarryFlag(false)
+
+		return 2
+	case 0xb7:
+		return cpu.binOrWithRegA(cpu.A)
+	// END bin or with A Reg
+
+	// xor Wit A Reg
 	case 0xa8:
 		return cpu.xorWithRegA(cpu.B)
 	case 0xa9:
@@ -282,8 +396,9 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return 2
 	case 0xaf:
 		return cpu.xorWithRegA(cpu.A)
+	// END xor Wit A Reg
 
-		//store reg in mem
+	//store reg in mem
 	case 0x22:
 		hl := cpu.GetHL()
 		mc := cpu.storeRegInMemAddr(hl, cpu.A)
@@ -718,6 +833,64 @@ func (cpu *Cpu) loadImm16Reg2Ptr(higherRegPtr *uint8, lowerRegPtr *uint8) (cycle
 	*lowerRegPtr = GetLower8(val)
 
 	return 3
+
+}
+
+func (cpu *Cpu) addToRegA(regVal uint8) (cycles uint64) {
+
+	oldVal := cpu.A
+	cpu.A += regVal
+
+	cpu.SetZeroFlag(cpu.A == 0)
+	cpu.SetSubFlag(false)
+	cpu.SetCarryFlag(isCarryFlagAddition(oldVal, regVal))
+	cpu.SetHalfCarryFlag(isHalfCarryFlagAddition(oldVal, regVal))
+
+	cpu.PC++
+	return 1
+
+}
+
+func (cpu *Cpu) subFromRegA(regVal uint8) (cycles uint64) {
+
+	oldVal := cpu.A
+	cpu.A -= regVal
+
+	cpu.SetZeroFlag(cpu.A == 0)
+	cpu.SetSubFlag(true)
+	cpu.SetCarryFlag(isCarryFlagSubtraction(oldVal, regVal))
+	cpu.SetHalfCarryFlag(isHalfCarryFlagSubtraction(oldVal, regVal))
+
+	cpu.PC++
+	return 1
+
+}
+
+func (cpu *Cpu) binAndWithRegA(regVal uint8) (cycles uint64) {
+
+	cpu.A &= regVal
+
+	cpu.SetZeroFlag(cpu.A == 0)
+	cpu.SetSubFlag(false)
+	cpu.SetHalfCarryFlag(true)
+	cpu.SetCarryFlag(false)
+
+	cpu.PC++
+	return 1
+
+}
+
+func (cpu *Cpu) binOrWithRegA(regVal uint8) (cycles uint64) {
+
+	cpu.A |= regVal
+
+	cpu.SetZeroFlag(cpu.A == 0)
+	cpu.SetSubFlag(false)
+	cpu.SetHalfCarryFlag(false)
+	cpu.SetCarryFlag(false)
+
+	cpu.PC++
+	return 1
 
 }
 
