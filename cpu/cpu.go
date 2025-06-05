@@ -101,7 +101,37 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0x00:
 		cpu.PC++
 		return 1
-	//cb
+	//SCF
+	case 0x37:
+		cpu.PC++
+		cpu.SetSubFlag(false)
+		cpu.SetHalfCarryFlag(false)
+		cpu.SetCarryFlag(true)
+		return 1
+
+	//CCF
+	case 0x3f:
+		cpu.PC++
+		cpu.SetSubFlag(false)
+		cpu.SetHalfCarryFlag(false)
+		flag := cpu.GetCarryFlag()
+		if flag == 0 {
+			cpu.SetCarryFlag(true)
+		} else {
+			cpu.SetCarryFlag(false)
+		}
+		return 1
+
+	//CPL
+	case 0x2f:
+		cpu.PC++
+
+		cpu.SetSubFlag(true)
+		cpu.SetHalfCarryFlag(true)
+		cpu.A = ^cpu.A
+
+		return 1
+		//cb
 	case 0xcb:
 		return cpu.handleCB()
 
