@@ -256,6 +256,23 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 
 		return 4
 
+	//reti
+	case 0xd9:
+		cpu.PC++
+
+		readLow, _ := cpu.Memory.ReadByteAt(cpu.SP)
+		cpu.SP++
+
+		readHigh, _ := cpu.Memory.ReadByteAt(cpu.SP)
+		cpu.SP++
+
+		newPC := (uint16(readLow) | uint16(readHigh)<<8)
+
+		cpu.PC = newPC
+
+		cpu.IME = true
+
+		return 4
 	// load reg to reg/(HL)
 
 	// In B
@@ -730,22 +747,7 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		cpu.PC++
 		cpu.IME = false
 		return 1
-	case 0xd9:
-		cpu.PC++
 
-		readLow, _ := cpu.Memory.ReadByteAt(cpu.SP)
-		cpu.SP++
-
-		readHigh, _ := cpu.Memory.ReadByteAt(cpu.SP)
-		cpu.SP++
-
-		newPC := (uint16(readLow) | uint16(readHigh)<<8)
-
-		cpu.PC = newPC
-
-		cpu.IME = true
-
-		return 4
 	//compare imm to A
 	case 0xFE:
 		cpu.PC++
