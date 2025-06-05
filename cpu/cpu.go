@@ -179,6 +179,12 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		cpu.SetHL(res)
 		return 3
 
+	//LD SP, HL
+	case 0xf9:
+		cpu.PC++
+		cpu.SP = cpu.GetHL()
+		return 2
+
 	// Load 8 Bit Imm to Reg
 
 	case 0x06:
@@ -269,6 +275,16 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0x33:
 		return cpu.incrementReg16(REG_SP)
 
+	// add Reg16 to HL
+	case 0x09:
+		return cpu.addToHL(REG_BC)
+	case 0x19:
+		return cpu.addToHL(REG_DE)
+	case 0x29:
+		return cpu.addToHL(REG_HL)
+	case 0x39:
+		return cpu.addToHL(REG_SP)
+
 	// decrement Reg16
 	case 0x0b:
 		return cpu.decrementReg16(REG_BC)
@@ -279,6 +295,10 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0x3b:
 		return cpu.decrementReg16(REG_SP)
 
+	// jp HL
+	case 0xe9:
+		cpu.PC = cpu.GetHL()
+		return 1
 	//jump
 	case 0xC3:
 		return cpu.jumpIf(true)
@@ -1017,6 +1037,32 @@ func isHalfCarryFlagAddition16(valA uint16, valB uint16) bool {
 	lowerB := GetLower8(valB)
 
 	return isCarryFlagAddition(lowerA, lowerB)
+}
+
+func (cpu *Cpu) addToHL(reg Reg16) (cycles uint64) {
+	cpu.PC++
+
+	var op uint16
+	switch reg {
+	case REG_BC:
+		op = cpu.GetBC()
+		cpu.SetHL(cpu.GetHL() + cpu.GetBC())
+	case REG_DE:
+		op = cpu.GetDE()
+		cpu.SetHL(cpu.GetHL() + cpu.GetDE())
+	case REG_HL:
+		op = cpu.GetHL()
+		cpu.SetHL(cpu.GetHL() + cpu.GetHL())
+	case REG_SP:
+		op = cpu.SP
+		cpu.SetHL(cpu.GetHL() + cpu.SP)
+	}
+
+	cpu.SetSubFlag(false)
+	cpu.SetCarryFlag(isCarryFlagAddition16(cpu.GetHL(), op))
+	cpu.SetHalfCarryFlag(isHalfCarryFlagAddition16(cpu.GetHL(), op))
+
+	return 2
 }
 
 func (cpu *Cpu) ret() (cycles uint64) {
