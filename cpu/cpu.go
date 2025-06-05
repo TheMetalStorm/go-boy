@@ -483,7 +483,12 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return 2
 	case 0x87:
 		return cpu.addToRegA(cpu.A)
-	// END add to A Reg
+	case 0xc6:
+		cpu.PC++
+		imm, _ := cpu.Memory.ReadByteAt(cpu.PC)
+		cpu.addToRegA(imm)
+		return 2
+		// END add to A Reg
 
 	// add with carry to A Reg
 	case 0x88:
@@ -513,6 +518,12 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return 2
 	case 0x8f:
 		return cpu.addWithCarryToRegA(cpu.A)
+	case 0xce:
+		cpu.PC++
+		imm, _ := cpu.Memory.ReadByteAt(cpu.PC)
+		cpu.addWithCarryToRegA(imm)
+		return 2
+
 	// END add with carry to A Reg
 
 	// sub from A Reg
@@ -542,6 +553,11 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return 2
 	case 0x97:
 		return cpu.subFromRegA(cpu.A)
+	case 0xd6:
+		cpu.PC++
+		imm, _ := cpu.Memory.ReadByteAt(cpu.PC)
+		cpu.subFromRegA(imm)
+		return 2
 	// END sub from A Reg
 
 	// sub with carry to A Reg
@@ -572,6 +588,12 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return 2
 	case 0x9f:
 		return cpu.subWithCarryFromRegA(cpu.A)
+	case 0xDE:
+		cpu.PC++
+		imm, _ := cpu.Memory.ReadByteAt(cpu.PC)
+		cpu.subWithCarryFromRegA(imm)
+		return 2
+
 	// END sub with carry to A Reg
 
 	// bin and with A Reg
@@ -600,6 +622,11 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return 2
 	case 0xa7:
 		return cpu.binAndWithRegA(cpu.A)
+	case 0xE6:
+		cpu.PC++
+		imm, _ := cpu.Memory.ReadByteAt(cpu.PC)
+		cpu.binAndWithRegA(imm)
+		return 2
 	// END bin and with A Reg
 
 	// xor Wit A Reg
@@ -628,7 +655,11 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return 2
 	case 0xaf:
 		return cpu.xorWithRegA(cpu.A)
-
+	case 0xEE:
+		cpu.PC++
+		imm, _ := cpu.Memory.ReadByteAt(cpu.PC)
+		cpu.xorWithRegA(imm)
+		return 2
 	// END xor Wit A Reg
 
 	// bin or with A Reg
@@ -657,7 +688,12 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return 2
 	case 0xb7:
 		return cpu.binOrWithRegA(cpu.A)
-	// END bin or with A Reg
+	case 0xF6:
+		cpu.PC++
+		imm, _ := cpu.Memory.ReadByteAt(cpu.PC)
+		cpu.binOrWithRegA(imm)
+		return 2
+		// END bin or with A Reg
 
 	// compare With A Reg
 
@@ -685,10 +721,19 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return 2
 	case 0xbf:
 		return cpu.compareWithRegA(cpu.A)
-
+	case 0xfe:
+		cpu.PC++
+		imm, _ := cpu.Memory.ReadByteAt(cpu.PC)
+		cpu.compareWithRegA(imm)
+		return 2
 	// END compare With A Reg
 
 	//store reg in mem
+
+	case 0x02:
+		return cpu.storeRegInMemAddr(cpu.GetBC(), cpu.A)
+	case 0x12:
+		return cpu.storeRegInMemAddr(cpu.GetDE(), cpu.A)
 	case 0x22:
 		hl := cpu.GetHL()
 		mc := cpu.storeRegInMemAddr(hl, cpu.A)
@@ -709,11 +754,23 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0xe0:
 		return cpu.storeRegInAfterIoImmMemAddr(cpu.A)
 
-	//store mem in reg
+		//store mem in reg
+	case 0x0a:
+		return cpu.storeMemIntoReg(cpu.GetBC(), &cpu.A)
 	case 0x1a:
 		return cpu.storeMemIntoReg(cpu.GetDE(), &cpu.A)
+	case 0x2a:
+		hl := cpu.GetHL()
+		cycles := cpu.storeMemIntoReg(hl, &cpu.A)
+		cpu.SetHL(hl + 1)
+		return cycles
+	case 0x3a:
+		hl := cpu.GetHL()
+		cycles := cpu.storeMemIntoReg(hl, &cpu.A)
+		cpu.SetHL(hl - 1)
+		return cycles
 
-		//store imm mem in reg
+	//store imm mem in reg
 	case 0xf0:
 		return cpu.storeAfterIoImm8MemAddrIntoReg(&cpu.A)
 
@@ -748,16 +805,6 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		cpu.IME = false
 		return 1
 
-	//compare imm to A
-	case 0xFE:
-		cpu.PC++
-		data, skip := cpu.Memory.ReadByteAt(cpu.PC)
-		cpu.PC += skip
-		cpu.SetZeroFlag((cpu.A - data) == 0)
-		cpu.SetSubFlag(true)
-		cpu.SetHalfCarryFlag(isHalfCarryFlagSubtraction(cpu.A, data))
-		cpu.SetCarryFlag(isCarryFlagSubtraction(cpu.A, data))
-		return 2
 	//RLA
 	//similiar to cbRegRotateLeft (other numBytes, numCycles and different flags)
 	case 0x17:
