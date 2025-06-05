@@ -283,9 +283,9 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return 2
 	case 0x87:
 		return cpu.addToRegA(cpu.A)
-		// END add to A Reg
+	// END add to A Reg
 
-		// add with carry to A Reg
+	// add with carry to A Reg
 	case 0x88:
 		return cpu.addWithCarryToRegA(cpu.B)
 	case 0x89:
@@ -502,9 +502,6 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0xe2:
 		return cpu.storeRegInMemAddr(IO_START_ADDR+uint16(cpu.C), cpu.A)
 
-	case 0x77:
-		return cpu.storeRegInMemAddr(cpu.GetHL(), cpu.A)
-
 	case 0xea:
 		return cpu.storeRegInImmMemAddr(cpu.A)
 
@@ -521,14 +518,187 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return cpu.storeAfterIoImm8MemAddrIntoReg(&cpu.A)
 
 	// store Reg in Reg
-	case 0x7b:
-		return cpu.storeValInReg(&cpu.A, cpu.E)
+
+	// In B
+	case 0x40:
+		return cpu.storeValInReg(&cpu.B, cpu.B)
+	case 0x41:
+		return cpu.storeValInReg(&cpu.B, cpu.C)
+	case 0x42:
+		return cpu.storeValInReg(&cpu.B, cpu.D)
+	case 0x43:
+		return cpu.storeValInReg(&cpu.B, cpu.E)
+	case 0x44:
+		return cpu.storeValInReg(&cpu.B, cpu.H)
+	case 0x45:
+		return cpu.storeValInReg(&cpu.B, cpu.L)
+	case 0x46:
+		value, _ := cpu.Memory.ReadByteAt(cpu.GetHL())
+		cycles := cpu.storeValInReg(&cpu.B, value)
+		cycles++
+		return cycles
+	case 0x47:
+		return cpu.storeValInReg(&cpu.B, cpu.A)
+
+		//END In B
+
+		// In C
+	case 0x48:
+		return cpu.storeValInReg(&cpu.C, cpu.B)
+	case 0x49:
+		return cpu.storeValInReg(&cpu.C, cpu.C)
+	case 0x4a:
+		return cpu.storeValInReg(&cpu.C, cpu.D)
+	case 0x4b:
+		return cpu.storeValInReg(&cpu.C, cpu.E)
+	case 0x4c:
+		return cpu.storeValInReg(&cpu.C, cpu.H)
+	case 0x4d:
+		return cpu.storeValInReg(&cpu.C, cpu.L)
+	case 0x4e:
+		value, _ := cpu.Memory.ReadByteAt(cpu.GetHL())
+		cycles := cpu.storeValInReg(&cpu.C, value)
+		cycles++
+		return cycles
 	case 0x4f:
 		return cpu.storeValInReg(&cpu.C, cpu.A)
+
+	//END In C
+
+	// In D
+	case 0x50:
+		return cpu.storeValInReg(&cpu.D, cpu.B)
+	case 0x51:
+		return cpu.storeValInReg(&cpu.D, cpu.C)
+	case 0x52:
+		return cpu.storeValInReg(&cpu.D, cpu.D)
+	case 0x53:
+		return cpu.storeValInReg(&cpu.D, cpu.E)
+	case 0x54:
+		return cpu.storeValInReg(&cpu.D, cpu.H)
+	case 0x55:
+		return cpu.storeValInReg(&cpu.D, cpu.L)
+	case 0x56:
+		value, _ := cpu.Memory.ReadByteAt(cpu.GetHL())
+		cycles := cpu.storeValInReg(&cpu.D, value)
+		cycles++
+		return cycles
 	case 0x57:
 		return cpu.storeValInReg(&cpu.D, cpu.A)
+
+		//END In D
+
+		// In E
+	case 0x58:
+		return cpu.storeValInReg(&cpu.E, cpu.B)
+	case 0x59:
+		return cpu.storeValInReg(&cpu.E, cpu.C)
+	case 0x5a:
+		return cpu.storeValInReg(&cpu.E, cpu.D)
+	case 0x5b:
+		return cpu.storeValInReg(&cpu.E, cpu.E)
+	case 0x5c:
+		return cpu.storeValInReg(&cpu.E, cpu.H)
+	case 0x5d:
+		return cpu.storeValInReg(&cpu.E, cpu.L)
+	case 0x5e:
+		value, _ := cpu.Memory.ReadByteAt(cpu.GetHL())
+		cycles := cpu.storeValInReg(&cpu.E, value)
+		cycles++
+		return cycles
+	case 0x5f:
+		return cpu.storeValInReg(&cpu.E, cpu.A)
+
+	//END In E
+
+	// In H
+	case 0x60:
+		return cpu.storeValInReg(&cpu.H, cpu.B)
+	case 0x61:
+		return cpu.storeValInReg(&cpu.H, cpu.C)
+	case 0x62:
+		return cpu.storeValInReg(&cpu.H, cpu.D)
+	case 0x63:
+		return cpu.storeValInReg(&cpu.H, cpu.E)
+	case 0x64:
+		return cpu.storeValInReg(&cpu.H, cpu.H)
+	case 0x65:
+		return cpu.storeValInReg(&cpu.H, cpu.L)
+	case 0x66:
+		value, _ := cpu.Memory.ReadByteAt(cpu.GetHL())
+		cycles := cpu.storeValInReg(&cpu.H, value)
+		cycles++
+		return cycles
 	case 0x67:
 		return cpu.storeValInReg(&cpu.H, cpu.A)
+
+	//END In H
+
+	// In L
+	case 0x68:
+		return cpu.storeValInReg(&cpu.L, cpu.B)
+	case 0x69:
+		return cpu.storeValInReg(&cpu.L, cpu.C)
+	case 0x6a:
+		return cpu.storeValInReg(&cpu.L, cpu.D)
+	case 0x6b:
+		return cpu.storeValInReg(&cpu.L, cpu.E)
+	case 0x6c:
+		return cpu.storeValInReg(&cpu.L, cpu.H)
+	case 0x6d:
+		return cpu.storeValInReg(&cpu.L, cpu.L)
+	case 0x6e:
+		value, _ := cpu.Memory.ReadByteAt(cpu.GetHL())
+		cycles := cpu.storeValInReg(&cpu.L, value)
+		cycles++
+		return cycles
+	case 0x6f:
+		return cpu.storeValInReg(&cpu.L, cpu.A)
+
+		//END In L
+
+	// IN (HL)
+
+	case 0x70:
+		return cpu.storeRegInMemAddr(cpu.GetHL(), cpu.B)
+	case 0x71:
+		return cpu.storeRegInMemAddr(cpu.GetHL(), cpu.C)
+	case 0x72:
+		return cpu.storeRegInMemAddr(cpu.GetHL(), cpu.D)
+	case 0x73:
+		return cpu.storeRegInMemAddr(cpu.GetHL(), cpu.E)
+	case 0x74:
+		return cpu.storeRegInMemAddr(cpu.GetHL(), cpu.H)
+	case 0x75:
+		return cpu.storeRegInMemAddr(cpu.GetHL(), cpu.L)
+	//NOTE: dont worry, 0x76 is Halt
+	case 0x77:
+		return cpu.storeRegInMemAddr(cpu.GetHL(), cpu.A)
+
+	//END in (HL)
+
+	// In A
+	case 0x78:
+		return cpu.storeValInReg(&cpu.A, cpu.B)
+	case 0x79:
+		return cpu.storeValInReg(&cpu.A, cpu.C)
+	case 0x7a:
+		return cpu.storeValInReg(&cpu.A, cpu.D)
+	case 0x7b:
+		return cpu.storeValInReg(&cpu.A, cpu.E)
+	case 0x7c:
+		return cpu.storeValInReg(&cpu.A, cpu.H)
+	case 0x7d:
+		return cpu.storeValInReg(&cpu.A, cpu.L)
+	case 0x7e:
+		value, _ := cpu.Memory.ReadByteAt(cpu.GetHL())
+		cycles := cpu.storeValInReg(&cpu.A, value)
+		cycles++
+		return cycles
+	case 0x7f:
+		return cpu.storeValInReg(&cpu.A, cpu.A)
+
+	//END In A
 
 	// push 16
 	case 0xf5:
