@@ -283,7 +283,37 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return 2
 	case 0x87:
 		return cpu.addToRegA(cpu.A)
-	// END add to A Reg
+		// END add to A Reg
+
+		// add with carry to A Reg
+	case 0x88:
+		return cpu.addWithCarryToRegA(cpu.B)
+	case 0x89:
+		return cpu.addWithCarryToRegA(cpu.C)
+	case 0x8a:
+		return cpu.addWithCarryToRegA(cpu.D)
+	case 0x8b:
+		return cpu.addWithCarryToRegA(cpu.E)
+	case 0x8c:
+		return cpu.addWithCarryToRegA(cpu.H)
+	case 0x8d:
+		return cpu.addWithCarryToRegA(cpu.L)
+	case 0x8e:
+		oldVal := cpu.A
+		addVal, skip := cpu.Memory.ReadByteAt(cpu.GetHL())
+		addVal += cpu.GetCarryFlag()
+		cpu.A += addVal
+		cpu.PC += skip
+
+		cpu.SetZeroFlag(cpu.A == 0)
+		cpu.SetSubFlag(false)
+		cpu.SetCarryFlag(isCarryFlagAddition(oldVal, addVal))
+		cpu.SetHalfCarryFlag(isHalfCarryFlagAddition(oldVal, addVal))
+
+		return 2
+	case 0x8f:
+		return cpu.addWithCarryToRegA(cpu.A)
+	// END add with carry to A Reg
 
 	// sub from A Reg
 	case 0x90:
@@ -314,6 +344,36 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return cpu.subFromRegA(cpu.A)
 	// END sub from A Reg
 
+	// sub with carry to A Reg
+	case 0x98:
+		return cpu.subWithCarryFromRegA(cpu.B)
+	case 0x99:
+		return cpu.subWithCarryFromRegA(cpu.C)
+	case 0x9a:
+		return cpu.subWithCarryFromRegA(cpu.D)
+	case 0x9b:
+		return cpu.subWithCarryFromRegA(cpu.E)
+	case 0x9c:
+		return cpu.subWithCarryFromRegA(cpu.H)
+	case 0x9d:
+		return cpu.subWithCarryFromRegA(cpu.L)
+	case 0x9e:
+		oldVal := cpu.A
+		subVal, skip := cpu.Memory.ReadByteAt(cpu.GetHL())
+		subVal += cpu.GetCarryFlag()
+		cpu.A -= subVal
+		cpu.PC += skip
+
+		cpu.SetZeroFlag(cpu.A == 0)
+		cpu.SetSubFlag(true)
+		cpu.SetCarryFlag(isCarryFlagSubtraction(oldVal, subVal))
+		cpu.SetHalfCarryFlag(isHalfCarryFlagSubtraction(oldVal, subVal))
+
+		return 2
+	case 0x9f:
+		return cpu.subWithCarryFromRegA(cpu.A)
+	// END sub with carry to A Reg
+
 	// bin and with A Reg
 	case 0xa0:
 		return cpu.binAndWithRegA(cpu.B)
@@ -341,34 +401,6 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0xa7:
 		return cpu.binAndWithRegA(cpu.A)
 	// END bin and with A Reg
-
-	// bin or with A Reg
-	case 0xb0:
-		return cpu.binOrWithRegA(cpu.B)
-	case 0xb1:
-		return cpu.binOrWithRegA(cpu.C)
-	case 0xb2:
-		return cpu.binOrWithRegA(cpu.D)
-	case 0xb3:
-		return cpu.binOrWithRegA(cpu.E)
-	case 0xb4:
-		return cpu.binOrWithRegA(cpu.H)
-	case 0xb5:
-		return cpu.binOrWithRegA(cpu.L)
-	case 0xb6:
-		orVal, skip := cpu.Memory.ReadByteAt(cpu.GetHL())
-		cpu.A |= orVal
-		cpu.PC += skip
-
-		cpu.SetZeroFlag(cpu.A == 0)
-		cpu.SetSubFlag(false)
-		cpu.SetHalfCarryFlag(false)
-		cpu.SetCarryFlag(false)
-
-		return 2
-	case 0xb7:
-		return cpu.binOrWithRegA(cpu.A)
-	// END bin or with A Reg
 
 	// xor Wit A Reg
 	case 0xa8:
@@ -398,6 +430,34 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return cpu.xorWithRegA(cpu.A)
 
 	// END xor Wit A Reg
+
+	// bin or with A Reg
+	case 0xb0:
+		return cpu.binOrWithRegA(cpu.B)
+	case 0xb1:
+		return cpu.binOrWithRegA(cpu.C)
+	case 0xb2:
+		return cpu.binOrWithRegA(cpu.D)
+	case 0xb3:
+		return cpu.binOrWithRegA(cpu.E)
+	case 0xb4:
+		return cpu.binOrWithRegA(cpu.H)
+	case 0xb5:
+		return cpu.binOrWithRegA(cpu.L)
+	case 0xb6:
+		orVal, skip := cpu.Memory.ReadByteAt(cpu.GetHL())
+		cpu.A |= orVal
+		cpu.PC += skip
+
+		cpu.SetZeroFlag(cpu.A == 0)
+		cpu.SetSubFlag(false)
+		cpu.SetHalfCarryFlag(false)
+		cpu.SetCarryFlag(false)
+
+		return 2
+	case 0xb7:
+		return cpu.binOrWithRegA(cpu.A)
+	// END bin or with A Reg
 
 	// compare With A Reg
 
@@ -882,6 +942,22 @@ func (cpu *Cpu) addToRegA(regVal uint8) (cycles uint64) {
 
 }
 
+func (cpu *Cpu) addWithCarryToRegA(regVal uint8) (cycles uint64) {
+
+	oldVal := cpu.A
+	addVal := regVal + cpu.GetCarryFlag()
+	cpu.A += addVal
+
+	cpu.SetZeroFlag(cpu.A == 0)
+	cpu.SetSubFlag(false)
+	cpu.SetCarryFlag(isCarryFlagAddition(oldVal, addVal))
+	cpu.SetHalfCarryFlag(isHalfCarryFlagAddition(oldVal, addVal))
+
+	cpu.PC++
+	return 1
+
+}
+
 func (cpu *Cpu) subFromRegA(regVal uint8) (cycles uint64) {
 
 	oldVal := cpu.A
@@ -891,6 +967,22 @@ func (cpu *Cpu) subFromRegA(regVal uint8) (cycles uint64) {
 	cpu.SetSubFlag(true)
 	cpu.SetCarryFlag(isCarryFlagSubtraction(oldVal, regVal))
 	cpu.SetHalfCarryFlag(isHalfCarryFlagSubtraction(oldVal, regVal))
+
+	cpu.PC++
+	return 1
+
+}
+
+func (cpu *Cpu) subWithCarryFromRegA(regVal uint8) (cycles uint64) {
+
+	oldVal := cpu.A
+	subVal := regVal + cpu.GetCarryFlag()
+	cpu.A -= subVal
+
+	cpu.SetZeroFlag(cpu.A == 0)
+	cpu.SetSubFlag(true)
+	cpu.SetCarryFlag(isCarryFlagSubtraction(oldVal, subVal))
+	cpu.SetHalfCarryFlag(isHalfCarryFlagSubtraction(oldVal, subVal))
 
 	cpu.PC++
 	return 1
@@ -925,17 +1017,6 @@ func (cpu *Cpu) binOrWithRegA(regVal uint8) (cycles uint64) {
 
 }
 
-func (cpu *Cpu) compareWithRegA(regVal uint8) (cycles uint64) {
-
-	cpu.SetZeroFlag(cpu.A == regVal)
-	cpu.SetSubFlag(true)
-	cpu.SetCarryFlag(isCarryFlagSubtraction(cpu.A, regVal))
-	cpu.SetHalfCarryFlag(isHalfCarryFlagSubtraction(cpu.A, regVal))
-
-	cpu.PC++
-	return 1
-}
-
 func (cpu *Cpu) xorWithRegA(regVal uint8) (cycles uint64) {
 
 	cpu.A ^= regVal
@@ -948,6 +1029,17 @@ func (cpu *Cpu) xorWithRegA(regVal uint8) (cycles uint64) {
 	cpu.PC++
 	return 1
 
+}
+
+func (cpu *Cpu) compareWithRegA(regVal uint8) (cycles uint64) {
+
+	cpu.SetZeroFlag(cpu.A == regVal)
+	cpu.SetSubFlag(true)
+	cpu.SetCarryFlag(isCarryFlagSubtraction(cpu.A, regVal))
+	cpu.SetHalfCarryFlag(isHalfCarryFlagSubtraction(cpu.A, regVal))
+
+	cpu.PC++
+	return 1
 }
 
 func GetHigher8(orig uint16) uint8 {
