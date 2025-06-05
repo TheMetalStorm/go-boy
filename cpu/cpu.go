@@ -283,13 +283,13 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0xC3:
 		return cpu.jumpIf(true)
 	case 0xC2:
-		return cpu.jumpIf(cpu.GetZeroFlag() != 0)
-	case 0xD2:
-		return cpu.jumpIf(cpu.GetCarryFlag() != 0)
-	case 0xCA:
 		return cpu.jumpIf(cpu.GetZeroFlag() == 0)
-	case 0xDA:
+	case 0xD2:
 		return cpu.jumpIf(cpu.GetCarryFlag() == 0)
+	case 0xCA:
+		return cpu.jumpIf(cpu.GetZeroFlag() == 1)
+	case 0xDA:
+		return cpu.jumpIf(cpu.GetCarryFlag() == 1)
 
 	// jumpRel
 	case 0x20:
@@ -299,46 +299,42 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0x18:
 		return cpu.jumpRelIf(true)
 	case 0x28:
-		return cpu.jumpRelIf(cpu.GetZeroFlag() != 0)
+		return cpu.jumpRelIf(cpu.GetZeroFlag() == 1)
 	case 0x38:
-		return cpu.jumpRelIf(cpu.GetCarryFlag() != 0)
+		return cpu.jumpRelIf(cpu.GetCarryFlag() == 1)
 
 	// call
 	case 0xcd:
-		return cpu.call16Imm()
+		return cpu.call16ImmIf(true)
+	case 0xc4:
+		return cpu.call16ImmIf(cpu.GetZeroFlag() == 0)
+	case 0xd4:
+		return cpu.call16ImmIf(cpu.GetCarryFlag() == 0)
+	case 0xcc:
+		return cpu.call16ImmIf(cpu.GetZeroFlag() == 1)
+	case 0xdc:
+		return cpu.call16ImmIf(cpu.GetCarryFlag() == 1)
 
 	//ret
 	case 0xc9:
-
-		readLow, _ := cpu.Memory.ReadByteAt(cpu.SP)
-		cpu.SP++
-
-		readHigh, _ := cpu.Memory.ReadByteAt(cpu.SP)
-		cpu.SP++
-		newPC := (uint16(readLow) | uint16(readHigh)<<8)
-
-		cpu.PC = newPC
-
-		return 4
-
+		return cpu.ret()
 	//reti
 	case 0xd9:
-		cpu.PC++
-
-		readLow, _ := cpu.Memory.ReadByteAt(cpu.SP)
-		cpu.SP++
-
-		readHigh, _ := cpu.Memory.ReadByteAt(cpu.SP)
-		cpu.SP++
-
-		newPC := (uint16(readLow) | uint16(readHigh)<<8)
-
-		cpu.PC = newPC
-
+		cycles := cpu.ret()
 		cpu.IME = true
+		return cycles
 
-		return 4
-	// load reg to reg/(HL)
+	//retIf
+	case 0xC0:
+		return cpu.retIf(cpu.GetZeroFlag() == 0)
+	case 0xD0:
+		return cpu.retIf(cpu.GetCarryFlag() == 0)
+	case 0xC8:
+		return cpu.retIf(cpu.GetZeroFlag() == 1)
+	case 0xD8:
+		return cpu.retIf(cpu.GetCarryFlag() == 1)
+
+		// load reg to reg/(HL)
 
 	// In B
 	case 0x40:
@@ -1023,6 +1019,39 @@ func isHalfCarryFlagAddition16(valA uint16, valB uint16) bool {
 	return isCarryFlagAddition(lowerA, lowerB)
 }
 
+func (cpu *Cpu) ret() (cycles uint64) {
+	readLow, _ := cpu.Memory.ReadByteAt(cpu.SP)
+	cpu.SP++
+
+	readHigh, _ := cpu.Memory.ReadByteAt(cpu.SP)
+	cpu.SP++
+	newPC := (uint16(readLow) | uint16(readHigh)<<8)
+
+	cpu.PC = newPC
+
+	return 4
+
+}
+
+func (cpu *Cpu) retIf(cond bool) (cycles uint64) {
+	if cond {
+		readLow, _ := cpu.Memory.ReadByteAt(cpu.SP)
+		cpu.SP++
+
+		readHigh, _ := cpu.Memory.ReadByteAt(cpu.SP)
+		cpu.SP++
+		newPC := (uint16(readLow) | uint16(readHigh)<<8)
+
+		cpu.PC = newPC
+
+		return 4
+	} else {
+		cpu.PC++
+		return 2
+	}
+
+}
+
 func (cpu *Cpu) pop16(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles uint64) {
 	cpu.PC++
 
@@ -1056,32 +1085,36 @@ func (cpu *Cpu) storeValInReg(regPtr *uint8, val uint8) (cycles uint64) {
 
 // In memory, push the program counter PC value corresponding to the address following the CALL instruction to the 2 bytes
 // following the byte specified by the current stack pointer SP. Then load the 16-bit immediate operand a16 into Pcpu.
-func (cpu *Cpu) call16Imm() (cycles uint64) {
+func (cpu *Cpu) call16ImmIf(cond bool) (cycles uint64) {
+	if cond {
+		cpu.PC++
+		newPCAddr, bytesRead := cpu.Memory.Read16At(cpu.PC)
+		cpu.PC += bytesRead
 
-	cpu.PC++
-	newPCAddr, bytesRead := cpu.Memory.Read16At(cpu.PC)
-	cpu.PC += bytesRead
+		// With the push, the current value of SP is decremented by 1, and the higher-order byte of PC is loaded in the
+		// memory address specified by the new SP value. The value of SP is then decremented by 1 again, and the lower-order
+		//byte of PC is loaded in the memory address specified by that value of SP.
+		cpu.SP--
+		cpu.Memory.SetValue(cpu.SP, GetHigher8(cpu.PC))
+		cpu.SP--
+		cpu.Memory.SetValue(cpu.SP, GetLower8(cpu.PC)) // lower order byte of PC
 
-	// With the push, the current value of SP is decremented by 1, and the higher-order byte of PC is loaded in the
-	// memory address specified by the new SP value. The value of SP is then decremented by 1 again, and the lower-order
-	//byte of PC is loaded in the memory address specified by that value of SP.
-	cpu.SP--
-	cpu.Memory.SetValue(cpu.SP, GetHigher8(cpu.PC))
-	cpu.SP--
-	cpu.Memory.SetValue(cpu.SP, GetLower8(cpu.PC)) // lower order byte of PC
+		//The subroutine is placed after the location specified by the new PC value. When the subroutine finishes, control is
+		//returned to the source program using a return instruction and by popping the starting address of the next
+		//instruction (which was just pushed) and moving it to the Pcpu.
 
-	//The subroutine is placed after the location specified by the new PC value. When the subroutine finishes, control is
-	//returned to the source program using a return instruction and by popping the starting address of the next
-	//instruction (which was just pushed) and moving it to the Pcpu.
+		cpu.PC = newPCAddr
+		// The lower-order byte of a16 is placed in byte 2 of the object code, and the higher-order byte is placed in byte 3.
+		newPCAddrHigher := GetHigher8(cpu.PC)
+		newPCAddrLower := GetLower8(cpu.PC)
+		cpu.Memory.Oam[2] = newPCAddrLower
+		cpu.Memory.Oam[3] = newPCAddrHigher
 
-	cpu.PC = newPCAddr
-	// The lower-order byte of a16 is placed in byte 2 of the object code, and the higher-order byte is placed in byte 3.
-	newPCAddrHigher := GetHigher8(cpu.PC)
-	newPCAddrLower := GetLower8(cpu.PC)
-	cpu.Memory.Oam[2] = newPCAddrLower
-	cpu.Memory.Oam[3] = newPCAddrHigher
-
-	return 6
+		return 6
+	} else {
+		cpu.PC += 3
+		return 3
+	}
 }
 
 func (cpu *Cpu) storeMemIntoReg(address uint16, regPtr *uint8) (cycles uint64) {
