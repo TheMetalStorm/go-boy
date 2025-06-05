@@ -38,7 +38,8 @@ func (e *Emulator) Restart() {
 	e.Cpu.Restart()
 	e.ranMCyclesThisFrame = 0
 
-	e.currentGame = rom.NewRom("./games/tetris.gb")
+	e.currentGame = rom.NewRom("./testroms/blargg/cpu_instrs/individual/11-op a,(hl).gb")
+	//e.currentGame = rom.NewRom("./games/tetris.gb")
 	e.LoadRom(e.currentGame)
 }
 
@@ -51,7 +52,7 @@ func (e *Emulator) LoadRom(r *Rom) {
 }
 
 func (e *Emulator) Run() {
-
+	e.serialOut()
 	for {
 		// if e.Cpu.Stop {
 		// 	continue
@@ -117,6 +118,16 @@ func (e *Emulator) handleInterrupts() uint64 {
 
 func (e *Emulator) refreshScreen() {
 	e.screen.Update()
+}
+
+func (e *Emulator) serialOut() {
+	read, _ := e.Cpu.Memory.ReadByteAt(0xff02)
+	if read == 0x81 {
+		ch, _ := e.Cpu.Memory.ReadByteAt(0xff01)
+		print(ch)
+		e.Cpu.Memory.SetValue(0xff02, 0x00)
+
+	}
 }
 
 func (e *Emulator) updateTimers(mCyclesThisStep uint64) {
