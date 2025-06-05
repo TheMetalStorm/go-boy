@@ -104,58 +104,144 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0xcb:
 		return cpu.handleCB()
 
-	//16 Load 16 Bit Imm to Reg
-	case 0x31:
-		r := cpu.loadImm16Reg(&cpu.SP)
-		return r
-	case 0x21:
-		return cpu.loadImm16Reg2Ptr(&cpu.H, &cpu.L)
+		//16 Load 16 Bit Imm to Reg
+	case 0x01:
+		return cpu.loadImm16Reg2Ptr(&cpu.B, &cpu.C)
 	case 0x11:
 		return cpu.loadImm16Reg2Ptr(&cpu.D, &cpu.E)
+	case 0x21:
+		return cpu.loadImm16Reg2Ptr(&cpu.H, &cpu.L)
+	case 0x31:
+		return cpu.loadImm16Reg(&cpu.SP)
 
 	// Load 8 Bit Imm to Reg
-	case 0x3e:
-		return cpu.loadImm8IntoReg(&cpu.A)
+
 	case 0x06:
 		return cpu.loadImm8IntoReg(&cpu.B)
+	case 0x16:
+		return cpu.loadImm8IntoReg(&cpu.D)
+	case 0x26:
+		return cpu.loadImm8IntoReg(&cpu.H)
+	case 0x36:
+		cpu.PC++
+		imm, skip := cpu.Memory.ReadByteAt(cpu.PC)
+		cpu.PC += skip
+		cpu.Memory.SetValue(cpu.GetHL(), imm)
+		return 3
+
 	case 0x0e:
 		return cpu.loadImm8IntoReg(&cpu.C)
 	case 0x1e:
 		return cpu.loadImm8IntoReg(&cpu.E)
 	case 0x2e:
 		return cpu.loadImm8IntoReg(&cpu.L)
+	case 0x3e:
+		return cpu.loadImm8IntoReg(&cpu.A)
 
 		// decrement Reg8
-	case 0x3d:
-		return cpu.decrementReg8(&cpu.A)
 	case 0x05:
 		return cpu.decrementReg8(&cpu.B)
+	case 0x15:
+		return cpu.decrementReg8(&cpu.D)
+	case 0x25:
+		return cpu.decrementReg8(&cpu.H)
+	case 0x35:
+		cpu.PC++
+		oldVal, _ := cpu.Memory.ReadByteAt(cpu.GetHL())
+		newVal := oldVal - 1
+		cpu.Memory.SetValue(cpu.GetHL(), newVal)
+
+		cpu.SetZeroFlag(newVal == 0)
+		cpu.SetSubFlag(true)
+		cpu.SetHalfCarryFlag(isHalfCarryFlagSubtraction(oldVal, 1))
+
+		return 3
+
 	case 0x0d:
 		return cpu.decrementReg8(&cpu.C)
+	case 0x1d:
+		return cpu.decrementReg8(&cpu.E)
+	case 0x2d:
+		return cpu.decrementReg8(&cpu.L)
+	case 0x3d:
+		return cpu.decrementReg8(&cpu.A)
 
 		// increment Reg8
 	case 0x04:
 		return cpu.incrementReg8(&cpu.B)
+	case 0x14:
+		return cpu.incrementReg8(&cpu.D)
+	case 0x24:
+		return cpu.incrementReg8(&cpu.H)
+	case 0x34:
+		cpu.PC++
+		oldVal, _ := cpu.Memory.ReadByteAt(cpu.GetHL())
+		newVal := oldVal + 1
+		cpu.Memory.SetValue(cpu.GetHL(), newVal)
+
+		cpu.SetZeroFlag(newVal == 0)
+		cpu.SetSubFlag(false)
+		cpu.SetHalfCarryFlag(isHalfCarryFlagAddition(oldVal, 1))
+
+		return 3
+
 	case 0x0c:
 		return cpu.incrementReg8(&cpu.C)
+	case 0x1c:
+		return cpu.incrementReg8(&cpu.E)
+	case 0x2c:
+		return cpu.incrementReg8(&cpu.L)
+	case 0x3c:
+		return cpu.incrementReg8(&cpu.A)
 
 		// increment Reg16
+	case 0x03:
+		return cpu.incrementReg16(REG_BC)
 	case 0x13:
 		return cpu.incrementReg16(REG_DE)
 	case 0x23:
 		return cpu.incrementReg16(REG_HL)
+	case 0x33:
+		return cpu.incrementReg16(REG_SP)
+
+	// increment Reg16
+	case 0x0b:
+		return cpu.decrementReg16(REG_BC)
+	case 0x1b:
+		return cpu.decrementReg16(REG_DE)
+	case 0x2b:
+		return cpu.decrementReg16(REG_HL)
+	case 0x3b:
+		return cpu.decrementReg16(REG_SP)
+
 	//jump
 	case 0xC3:
-		return cpu.jump()
+		return cpu.jumpIf(true)
+	case 0xC2:
+		return cpu.jumpIf(cpu.GetZeroFlag() != 0)
+	case 0xD2:
+		return cpu.jumpIf(cpu.GetCarryFlag() != 0)
+	case 0xCA:
+		return cpu.jumpIf(cpu.GetZeroFlag() == 0)
+	case 0xDA:
+		return cpu.jumpIf(cpu.GetCarryFlag() == 0)
+
+	// jumpRel
 	case 0x20:
 		return cpu.jumpRelIf(cpu.GetZeroFlag() == 0)
-	case 0x28:
-		return cpu.jumpRelIf(cpu.GetZeroFlag() != 0)
+	case 0x30:
+		return cpu.jumpRelIf(cpu.GetCarryFlag() == 0)
 	case 0x18:
 		return cpu.jumpRelIf(true)
-		// call
+	case 0x28:
+		return cpu.jumpRelIf(cpu.GetZeroFlag() != 0)
+	case 0x38:
+		return cpu.jumpRelIf(cpu.GetCarryFlag() != 0)
+
+	// call
 	case 0xcd:
 		return cpu.call16Imm()
+
 	//ret
 	case 0xc9:
 
@@ -170,9 +256,32 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 
 		return 4
 
-	// xor Reg
+		// xor Reg
+	case 0xa8:
+		return cpu.xorWithRegA(cpu.B)
+	case 0xa9:
+		return cpu.xorWithRegA(cpu.C)
+	case 0xaa:
+		return cpu.xorWithRegA(cpu.D)
+	case 0xab:
+		return cpu.xorWithRegA(cpu.E)
+	case 0xac:
+		return cpu.xorWithRegA(cpu.H)
+	case 0xad:
+		return cpu.xorWithRegA(cpu.L)
+	case 0xae:
+		val, skip := cpu.Memory.ReadByteAt(cpu.GetHL())
+		cpu.A ^= val
+
+		cpu.SetZeroFlag(cpu.A == 0)
+		cpu.SetCarryFlag(false)
+		cpu.SetHalfCarryFlag(false)
+		cpu.SetSubFlag(false)
+
+		cpu.PC += skip
+		return 2
 	case 0xaf:
-		return cpu.xorReg(&cpu.A)
+		return cpu.xorWithRegA(cpu.A)
 
 		//store reg in mem
 	case 0x22:
@@ -524,15 +633,44 @@ func (cpu *Cpu) incrementReg16(reg Reg16) (cycles uint64) {
 		cpu.SetDE(cpu.GetDE() + 1)
 	case REG_HL:
 		cpu.SetHL(cpu.GetHL() + 1)
+	case REG_SP:
+		cpu.SP += 1
 	default:
 		fmt.Printf("ERROR: Func %s, reg %s not Implemented!", "incrementReg16", reg.String())
 	}
 	return 2
 }
 
-func (cpu *Cpu) jump() (cycles uint64) {
-	cpu.PC, _ = cpu.Memory.Read16At(cpu.PC + 1)
-	return 4
+func (cpu *Cpu) decrementReg16(reg Reg16) (cycles uint64) {
+	cpu.PC++
+
+	switch reg {
+	case REG_AF:
+		cpu.SetAF(cpu.GetAF() - 1)
+	case REG_BC:
+		cpu.SetBC(cpu.GetBC() - 1)
+	case REG_DE:
+		cpu.SetDE(cpu.GetDE() - 1)
+	case REG_HL:
+		cpu.SetHL(cpu.GetHL() - 1)
+	case REG_SP:
+		cpu.SP -= 1
+	default:
+		fmt.Printf("ERROR: Func %s, reg %s not Implemented!", "decrementReg16", reg.String())
+	}
+	return 2
+}
+
+func (cpu *Cpu) jumpIf(cond bool) (cycles uint64) {
+	cpu.PC++
+	newPC, skip := cpu.Memory.Read16At(cpu.PC)
+	if cond {
+		cpu.PC = newPC
+		return 4
+	} else {
+		cpu.PC += skip
+		return 3
+	}
 }
 
 func (cpu *Cpu) storeRegInMemAddr(address uint16, toStore uint8) (cycles uint64) {
@@ -583,11 +721,11 @@ func (cpu *Cpu) loadImm16Reg2Ptr(higherRegPtr *uint8, lowerRegPtr *uint8) (cycle
 
 }
 
-func (cpu *Cpu) xorReg(regPtr *uint8) (cycles uint64) {
+func (cpu *Cpu) xorWithRegA(regVal uint8) (cycles uint64) {
 
-	*regPtr = 0
+	cpu.A ^= regVal
 
-	cpu.SetZeroFlag(true)
+	cpu.SetZeroFlag(cpu.A == 0)
 	cpu.SetCarryFlag(false)
 	cpu.SetHalfCarryFlag(false)
 	cpu.SetSubFlag(false)
