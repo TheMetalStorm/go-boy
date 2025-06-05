@@ -3,6 +3,7 @@ package cpu
 import (
 	"fmt"
 	"go-boy/mmap"
+	"math"
 
 	"os"
 )
@@ -113,6 +114,70 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return cpu.loadImm16Reg2Ptr(&cpu.H, &cpu.L)
 	case 0x31:
 		return cpu.loadImm16Reg(&cpu.SP)
+
+	//LD (a16), SP
+	case 0x08:
+
+		cpu.PC++
+		addr, skip := cpu.Memory.Read16At(cpu.PC)
+		cpu.PC += skip
+		lower := GetLower8(cpu.SP)
+		higher := GetHigher8(cpu.SP)
+		cpu.Memory.SetValue(addr, lower)
+		cpu.Memory.SetValue(addr+1, higher)
+		return 5
+
+	//ADD SP, s8
+	case 0xe8:
+		cpu.PC++
+		imm, skip := cpu.Memory.ReadByteAt(cpu.PC)
+
+		signedImm := int8(imm)
+		cpu.PC += skip
+
+		if signedImm >= 0 {
+			cpu.SP += uint16(signedImm)
+			cpu.SetHalfCarryFlag(isHalfCarryFlagAddition16(cpu.SP, uint16(signedImm)))
+			cpu.SetCarryFlag(isCarryFlagAddition16(cpu.SP, uint16(signedImm)))
+		} else {
+			signedAbs := uint16(math.Abs(float64(signedImm)))
+
+			cpu.SP -= signedAbs
+			cpu.SetHalfCarryFlag(isHalfCarryFlagSubtraction16(cpu.SP, signedAbs))
+			cpu.SetCarryFlag(isCarryFlagSubtraction16(cpu.SP, signedAbs))
+		}
+		return 4
+	//LD HL. SP + s8
+	case 0xF8:
+		cpu.PC++
+		imm, skip := cpu.Memory.ReadByteAt(cpu.PC)
+
+		signedImm := int8(imm)
+		cpu.PC += skip
+
+		var res uint16
+
+		cpu.SetZeroFlag(false)
+		cpu.SetSubFlag(false)
+
+		if signedImm >= 0 {
+			res = cpu.SP + uint16(signedImm)
+
+			cpu.SetHalfCarryFlag(isHalfCarryFlagAddition16(cpu.SP, uint16(signedImm)))
+			cpu.SetCarryFlag(isCarryFlagAddition16(cpu.SP, uint16(signedImm)))
+		} else {
+			// get absolute value go
+
+			signedAbs := uint16(math.Abs(float64(signedImm)))
+
+			res = cpu.SP - signedAbs
+
+			cpu.SetHalfCarryFlag(isHalfCarryFlagSubtraction16(cpu.SP, signedAbs))
+			cpu.SetCarryFlag(isCarryFlagSubtraction16(cpu.SP, signedAbs))
+		}
+
+		cpu.SetHL(res)
+		return 3
 
 	// Load 8 Bit Imm to Reg
 
@@ -744,17 +809,15 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		mc := cpu.storeRegInMemAddr(hl, cpu.A)
 		cpu.SetHL(hl - 1)
 		return mc
+
+	case 0xe0:
+		return cpu.storeRegInAfterIoImmMemAddr(cpu.A)
 	case 0xe2:
 		return cpu.storeRegInMemAddr(IO_START_ADDR+uint16(cpu.C), cpu.A)
-
 	case 0xea:
 		return cpu.storeRegInImmMemAddr(cpu.A)
 
-	//store reg in imm mem
-	case 0xe0:
-		return cpu.storeRegInAfterIoImmMemAddr(cpu.A)
-
-		//store mem in reg
+	//store mem in reg
 	case 0x0a:
 		return cpu.storeMemIntoReg(cpu.GetBC(), &cpu.A)
 	case 0x1a:
@@ -773,7 +836,18 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	//store imm mem in reg
 	case 0xf0:
 		return cpu.storeAfterIoImm8MemAddrIntoReg(&cpu.A)
-
+	case 0xf2:
+		cpu.PC++
+		loadedFromMem, _ := cpu.Memory.ReadByteAt(IO_START_ADDR + uint16(cpu.C))
+		cpu.A = loadedFromMem
+		return 2
+	case 0xfa:
+		cpu.PC++
+		ptr, _ := cpu.Memory.Read16At(cpu.PC)
+		val, _ := cpu.Memory.ReadByteAt(ptr)
+		cpu.PC += 2
+		cpu.A = val
+		return 4
 	// push 16
 
 	case 0xc5:
@@ -897,11 +971,23 @@ func isCarryFlagSubtraction(valA uint8, valB uint8) bool {
 	return valB > valA
 }
 
+func isCarryFlagSubtraction16(valA uint16, valB uint16) bool {
+
+	return valB > valA
+}
+
 func isCarryFlagAddition(valA uint8, valB uint8) bool {
 
 	var add uint16 = uint16(valA) + uint16(valB)
 
 	return (add) > 0xFF
+}
+
+func isCarryFlagAddition16(valA uint16, valB uint16) bool {
+
+	var add uint32 = uint32(valA) + uint32(valB)
+
+	return (add) > 0xFFFF
 }
 
 func isHalfCarryFlagSubtraction(valA uint8, valB uint8) bool {
@@ -912,12 +998,29 @@ func isHalfCarryFlagSubtraction(valA uint8, valB uint8) bool {
 	return lowerB > lowerA
 }
 
+func isHalfCarryFlagSubtraction16(valA uint16, valB uint16) bool {
+
+	lowerA := GetLower8(valA)
+	lowerB := GetLower8(valB)
+
+	return isHalfCarryFlagSubtraction(lowerA, lowerB)
+
+}
+
 func isHalfCarryFlagAddition(valA uint8, valB uint8) bool {
 
 	lowerA := getLower4(valA)
 	lowerB := getLower4(valB)
 
 	return (lowerA + lowerB) > 0xF
+}
+
+func isHalfCarryFlagAddition16(valA uint16, valB uint16) bool {
+
+	lowerA := GetLower8(valA)
+	lowerB := GetLower8(valB)
+
+	return isCarryFlagAddition(lowerA, lowerB)
 }
 
 func (cpu *Cpu) pop16(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles uint64) {
@@ -1026,7 +1129,13 @@ func (cpu *Cpu) jumpRelIf(cond bool) (cycles uint64) {
 	if cond {
 		signedData := int8(data)
 
-		cpu.PC += uint16(signedData)
+		if signedData >= 0 {
+			cpu.PC += uint16(signedData)
+		} else {
+			signedAbs := uint16(math.Abs(float64(signedData)))
+			cpu.PC -= signedAbs
+
+		}
 		return 3
 	}
 	return 2
