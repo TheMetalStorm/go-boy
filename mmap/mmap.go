@@ -170,12 +170,21 @@ func (m *Mmap) ReadByteAt(address uint16) (val uint8, bytesRead uint16) {
 	return 0, 0
 }
 
-func (m *Mmap) SetInterruptEnabledBit(bit ioregs.InterruptFlags, cond bool) {
+func SetBit(ptr *uint8, bit uint8, cond bool) {
 	if cond {
-		m.Ie |= (1 << bit)
+		*ptr |= (1 << bit)
 	} else {
-		m.Ie &^= (1 << bit)
+		*ptr &^= (1 << bit)
 	}
+}
+
+func GetBit(num uint8, bit uint8) bool {
+	res := (num >> bit) & 1
+	return res != 0
+}
+
+func (m *Mmap) SetInterruptEnabledBit(bit ioregs.InterruptFlags, cond bool) {
+	SetBit(&m.Ie, uint8(bit), cond)
 }
 
 func (m *Mmap) GetInterruptEnabledBit(bit ioregs.InterruptFlags) bool {

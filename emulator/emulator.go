@@ -5,6 +5,7 @@ package emulator
 import (
 	"go-boy/cpu"
 	"go-boy/ioregs"
+	"go-boy/mmap"
 	"go-boy/rom"
 	"go-boy/screen"
 )
@@ -134,7 +135,7 @@ func (e *Emulator) updateTimaReg(mCyclesThisStep uint64) {
 	tima := uint16(e.Cpu.Memory.Io.GetTIMA())
 	updatFreq := uint64(0)
 	timerControl := e.Cpu.Memory.Io.GetTAC()
-	timerEnabled := getBit(timerControl, 2)
+	timerEnabled := mmap.GetBit(timerControl, 2)
 	if timerEnabled {
 		switch timerControl & 0x03 {
 		case 0x00: // 00
@@ -166,9 +167,4 @@ func (e *Emulator) GetCurrentGame() []byte {
 
 func (e *Emulator) SetScreen(screen *Screen) {
 	e.screen = screen
-}
-
-func getBit(num uint8, bit uint8) bool {
-	res := (num >> bit) & 1
-	return res != 0
 }

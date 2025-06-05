@@ -925,26 +925,62 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		cpu.IME = false
 		return 1
 
-	//RLA
-	//similiar to cbRegRotateLeft (other numBytes, numCycles and different flags)
-	case 0x17:
+	//RLCA
+	case 0x07:
 		cpu.PC++
-		var newCarry bool
-		oldCarry := cpu.GetCarryFlag()
 
-		oldRegVal := cpu.A
-		cpu.A = oldRegVal << 1
-
-		if oldCarry == 1 {
-			cpu.A |= 1
-		} else {
-			cpu.A &^= (1)
-		}
+		newCarry := mmap.GetBit(cpu.A, 7)
+		cpu.A = cpu.A << 1
+		mmap.SetBit(&cpu.A, 0, newCarry)
 
 		cpu.SetZeroFlag(false)
 		cpu.SetSubFlag(false)
 		cpu.SetHalfCarryFlag(false)
-		newCarry = ((oldRegVal >> 7 & 1) == 1)
+		cpu.SetCarryFlag(newCarry)
+
+		return 1
+		//RLA
+		//similiar to cbRegRotateLeft (other numBytes, numCycles and different flags)
+	case 0x17:
+		cpu.PC++
+		newCarry := mmap.GetBit(cpu.A, 7)
+
+		cpu.A = cpu.A << 1
+		mmap.SetBit(&cpu.A, 0, cpu.GetCarryFlag() == 1)
+
+		cpu.SetZeroFlag(false)
+		cpu.SetSubFlag(false)
+		cpu.SetHalfCarryFlag(false)
+		cpu.SetCarryFlag(newCarry)
+
+		return 1
+
+	//RRCA
+	case 0x0F:
+		cpu.PC++
+
+		newCarry := mmap.GetBit(cpu.A, 0)
+		cpu.A = cpu.A >> 1
+		mmap.SetBit(&cpu.A, 7, newCarry)
+
+		cpu.SetZeroFlag(false)
+		cpu.SetSubFlag(false)
+		cpu.SetHalfCarryFlag(false)
+		cpu.SetCarryFlag(newCarry)
+
+		return 1
+
+	//RRA
+	case 0x1f:
+		cpu.PC++
+		newCarry := mmap.GetBit(cpu.A, 0)
+
+		cpu.A = cpu.A >> 1
+		mmap.SetBit(&cpu.A, 7, cpu.GetCarryFlag() == 1)
+
+		cpu.SetZeroFlag(false)
+		cpu.SetSubFlag(false)
+		cpu.SetHalfCarryFlag(false)
 		cpu.SetCarryFlag(newCarry)
 
 		return 1
@@ -966,7 +1002,7 @@ func (cpu *Cpu) handleCB() (cycles uint64) {
 	case 0x7c:
 		return cpu.cbSetZeroToComplementRegBit(&cpu.H, 7)
 	case 0x11:
-		return cpu.cbRegRotateLeft(&cpu.C)
+		return cpu.cbRegRotateLeftWithCarryInBit0(&cpu.C)
 	default:
 		cpu.PC -= 2
 		fmt.Printf("ERROR at PC 0x%04x: 0xcb%02x is not a recognized instruction!\n", cpu.PC, instr)
@@ -976,7 +1012,7 @@ func (cpu *Cpu) handleCB() (cycles uint64) {
 	}
 }
 
-func (cpu *Cpu) cbRegRotateLeft(regPtr *uint8) uint64 {
+func (cpu *Cpu) cbRegRotateLeftWithCarryInBit0(regPtr *uint8) uint64 {
 	var oldRegVal uint8
 	var oldCarry = cpu.GetCarryFlag()
 	var newCarry bool
