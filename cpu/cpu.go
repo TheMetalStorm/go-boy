@@ -25,6 +25,9 @@ type Cpu struct {
 	Memory *Mmap
 
 	IME bool
+
+	Halt bool
+	Stop bool
 }
 
 var IO_START_ADDR uint16 = 0xff00
@@ -49,6 +52,8 @@ func (cpu *Cpu) Restart() {
 	cpu.L = 0x4D
 	cpu.SP = 0xFFFE
 	cpu.PC = 0x100
+	cpu.Halt = false
+	cpu.Stop = false
 
 	cpu.Memory.SetValue(0xFF05, 0x00) // TIMA
 	cpu.Memory.SetValue(0xFF06, 0x00) // TMA
@@ -101,6 +106,37 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0x00:
 		cpu.PC++
 		return 1
+
+	//HALT
+	//NOTE: THANKS CHATGPT
+	case 0x76:
+		cpu.PC++
+
+		if !cpu.IME {
+			if cpu.Memory.GetIe()&cpu.Memory.Io.GetIF() != 0 {
+				// HALT BUG TRIGGERED: Skip next instruction!
+				cpu.PC++
+			} else {
+				cpu.Halt = true
+			}
+		} else {
+			cpu.Halt = true
+		}
+		return 1
+
+	// //Stop
+	// case 0x10:
+	// 	cpu.PC++
+	// 	read, skip := cpu.Memory.ReadByteAt(cpu.PC)
+	// 	if read == 0x00 {
+	// 		cpu.Stop = true
+	// 		cpu.PC += skip
+	// 		return 1
+	// 	}
+	// 	fmt.Printf("ERROR at PC 0x%04x: 0x%02x is not a valid stop instruction! Stop instruction should be 0x1000, but found 0x%04x\n", cpu.PC, instr, read)
+	// 	os.Exit(0)
+	// 	return 0
+
 	//SCF
 	case 0x37:
 		cpu.PC++
@@ -984,6 +1020,25 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		cpu.SetCarryFlag(newCarry)
 
 		return 1
+
+	// RST
+	case 0xc7:
+		return cpu.rst(0x00)
+	case 0xcf:
+		return cpu.rst(0x08)
+	case 0xd7:
+		return cpu.rst(0x10)
+	case 0xdf:
+		return cpu.rst(0x18)
+	case 0xe7:
+		return cpu.rst(0x20)
+	case 0xef:
+		return cpu.rst(0x28)
+	case 0xf7:
+		return cpu.rst(0x30)
+	case 0xff:
+		return cpu.rst(0x38)
+
 	default:
 		fmt.Printf("ERROR at PC 0x%04x: 0x%02x is not a recognized instruction!\n", cpu.PC, instr)
 		os.Exit(0)
@@ -1103,6 +1158,23 @@ func isHalfCarryFlagAddition16(valA uint16, valB uint16) bool {
 	lowerB := GetLower8(valB)
 
 	return isCarryFlagAddition(lowerA, lowerB)
+}
+
+func (cpu *Cpu) rst(newPC uint8) (cycles uint64) {
+
+	cpu.PC++
+
+	lowerPC := GetLower8(cpu.PC)
+	higherPC := GetHigher8(cpu.PC)
+
+	cpu.SP--
+	cpu.Memory.SetValue(cpu.SP, higherPC)
+	cpu.SP--
+	cpu.Memory.SetValue(cpu.SP, lowerPC)
+
+	cpu.PC = uint16(newPC)
+
+	return 4
 }
 
 func (cpu *Cpu) addToHL(reg Reg16) (cycles uint64) {
@@ -1412,6 +1484,7 @@ func (cpu *Cpu) loadImm16Reg2Ptr(higherRegPtr *uint8, lowerRegPtr *uint8) (cycle
 }
 
 func (cpu *Cpu) addToRegA(regVal uint8) (cycles uint64) {
+	cpu.PC++
 
 	oldVal := cpu.A
 	cpu.A += regVal
@@ -1421,12 +1494,12 @@ func (cpu *Cpu) addToRegA(regVal uint8) (cycles uint64) {
 	cpu.SetCarryFlag(isCarryFlagAddition(oldVal, regVal))
 	cpu.SetHalfCarryFlag(isHalfCarryFlagAddition(oldVal, regVal))
 
-	cpu.PC++
 	return 1
 
 }
 
 func (cpu *Cpu) addWithCarryToRegA(regVal uint8) (cycles uint64) {
+	cpu.PC++
 
 	oldVal := cpu.A
 	addVal := regVal + cpu.GetCarryFlag()
@@ -1437,7 +1510,6 @@ func (cpu *Cpu) addWithCarryToRegA(regVal uint8) (cycles uint64) {
 	cpu.SetCarryFlag(isCarryFlagAddition(oldVal, addVal))
 	cpu.SetHalfCarryFlag(isHalfCarryFlagAddition(oldVal, addVal))
 
-	cpu.PC++
 	return 1
 
 }

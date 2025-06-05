@@ -311,6 +311,9 @@ func (d *Debugger) StartDebugger() {
 
 func (d *Debugger) RunEmulator() {
 	for {
+		// if d.e.Cpu.Stop {
+		// 	continue
+		// }
 		if d.autorun {
 			if slices.Contains(d.GetBreakpoints(), d.e.Cpu.PC) && d.e.Cpu.PC != uint16(d.lastBPHit) {
 				d.autorun = false

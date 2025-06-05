@@ -53,14 +53,21 @@ func (e *Emulator) LoadRom(r *Rom) {
 func (e *Emulator) Run() {
 
 	for {
+		// if e.Cpu.Stop {
+		// 	continue
+		// }
 		e.Step()
 	}
 }
 
 func (e *Emulator) Step() {
 
-	ranMCyclesThisStep := e.Cpu.Step()
+	ranMCyclesThisStep := uint64(0)
 	ranMCyclesThisStep += e.handleInterrupts()
+
+	if !e.Cpu.Halt {
+		ranMCyclesThisStep = e.Cpu.Step()
+	}
 
 	e.updateTimers(ranMCyclesThisStep)
 
@@ -73,9 +80,9 @@ func (e *Emulator) Step() {
 // This interacts with the halt bug in an interesting way.
 // https://gbdev.io/pandocs/Interrupts.html#ffff--ie-interrupt-enable
 func (e *Emulator) handleInterrupts() uint64 {
+	requestedInterrupts := e.Cpu.Memory.Io.GetIF()
+	enabledInterrupts := e.Cpu.Memory.Ie
 	if e.Cpu.IME {
-		requestedInterrupts := e.Cpu.Memory.Io.GetIF()
-		enabledInterrupts := e.Cpu.Memory.Ie
 
 		if requestedInterrupts&enabledInterrupts > 0 {
 			e.Cpu.IME = false
@@ -101,6 +108,7 @@ func (e *Emulator) handleInterrupts() uint64 {
 				e.Cpu.Memory.Io.SetInterruptFlagBit(ioregs.JOYPAD, false)
 				e.Cpu.PC = 0x0060
 			}
+			e.Cpu.Halt = false
 			return 5
 		}
 	}
@@ -112,8 +120,7 @@ func (e *Emulator) refreshScreen() {
 }
 
 func (e *Emulator) updateTimers(mCyclesThisStep uint64) {
-	//TODO other timers
-	//https://gbdev.io/pandocs/Timer_and_Divider_Registers.html#ff05--tima-timer-counter
+
 	e.updateDivReg(mCyclesThisStep)
 	e.updateTimaReg(mCyclesThisStep)
 
