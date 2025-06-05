@@ -138,7 +138,7 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0x3e:
 		return cpu.loadImm8IntoReg(&cpu.A)
 
-		// decrement Reg8
+	// decrement Reg8
 	case 0x05:
 		return cpu.decrementReg8(&cpu.B)
 	case 0x15:
@@ -166,7 +166,7 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0x3d:
 		return cpu.decrementReg8(&cpu.A)
 
-		// increment Reg8
+	// increment Reg8
 	case 0x04:
 		return cpu.incrementReg8(&cpu.B)
 	case 0x14:
@@ -194,7 +194,7 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0x3c:
 		return cpu.incrementReg8(&cpu.A)
 
-		// increment Reg16
+	// increment Reg16
 	case 0x03:
 		return cpu.incrementReg16(REG_BC)
 	case 0x13:
@@ -204,7 +204,7 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0x33:
 		return cpu.incrementReg16(REG_SP)
 
-	// increment Reg16
+	// decrement Reg16
 	case 0x0b:
 		return cpu.decrementReg16(REG_BC)
 	case 0x1b:
@@ -396,7 +396,37 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return 2
 	case 0xaf:
 		return cpu.xorWithRegA(cpu.A)
+
 	// END xor Wit A Reg
+
+	// compare With A Reg
+
+	case 0xb8:
+		return cpu.compareWithRegA(cpu.B)
+	case 0xb9:
+		return cpu.compareWithRegA(cpu.C)
+	case 0xba:
+		return cpu.compareWithRegA(cpu.D)
+	case 0xbb:
+		return cpu.compareWithRegA(cpu.E)
+	case 0xbc:
+		return cpu.compareWithRegA(cpu.H)
+	case 0xbd:
+		return cpu.compareWithRegA(cpu.L)
+	case 0xbe:
+		compVal, skip := cpu.Memory.ReadByteAt(cpu.GetHL())
+
+		cpu.SetZeroFlag(cpu.A == compVal)
+		cpu.SetSubFlag(true)
+		cpu.SetCarryFlag(isCarryFlagSubtraction(cpu.A, compVal))
+		cpu.SetHalfCarryFlag(isHalfCarryFlagSubtraction(cpu.A, compVal))
+
+		cpu.PC += skip
+		return 2
+	case 0xbf:
+		return cpu.compareWithRegA(cpu.A)
+
+	// END compare With A Reg
 
 	//store reg in mem
 	case 0x22:
@@ -439,6 +469,7 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return cpu.storeValInReg(&cpu.D, cpu.A)
 	case 0x67:
 		return cpu.storeValInReg(&cpu.H, cpu.A)
+
 	// push 16
 	case 0xf5:
 		return cpu.push16(&cpu.A, &cpu.F)
@@ -892,6 +923,17 @@ func (cpu *Cpu) binOrWithRegA(regVal uint8) (cycles uint64) {
 	cpu.PC++
 	return 1
 
+}
+
+func (cpu *Cpu) compareWithRegA(regVal uint8) (cycles uint64) {
+
+	cpu.SetZeroFlag(cpu.A == regVal)
+	cpu.SetSubFlag(true)
+	cpu.SetCarryFlag(isCarryFlagSubtraction(cpu.A, regVal))
+	cpu.SetHalfCarryFlag(isHalfCarryFlagSubtraction(cpu.A, regVal))
+
+	cpu.PC++
+	return 1
 }
 
 func (cpu *Cpu) xorWithRegA(regVal uint8) (cycles uint64) {
