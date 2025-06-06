@@ -1,6 +1,7 @@
 package cpu
 
 type Reg16 int
+type Reg8 int
 
 const (
 	REG_AF Reg16 = iota
@@ -9,6 +10,17 @@ const (
 	REG_HL
 	REG_SP
 	REG_PC
+)
+
+const (
+	REG_B Reg8 = iota
+	REG_C
+	REG_D
+	REG_E
+	REG_H
+	REG_L
+	REG_MEM_HL
+	REG_A
 )
 
 var reg16Name = map[Reg16]string{
