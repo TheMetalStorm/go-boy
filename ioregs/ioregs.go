@@ -1,9 +1,5 @@
 package ioregs
 
-import (
-	"fmt"
-)
-
 type InterruptFlags uint8
 
 const (
@@ -461,21 +457,5 @@ func (i *Ioregs) GetInterruptFlagBit(bit InterruptFlags) bool {
 		return true
 	} else {
 		return false
-	}
-}
-
-// Dump
-
-func (i *Ioregs) Dump() {
-	i.dumpMemory(i.Regs[:], 0x00)
-}
-
-func (i *Ioregs) dumpMemory(memory []uint8, baseAddress uint16) {
-	for idx := 0; idx < len(memory); idx += 16 {
-		fmt.Printf("%04x ", baseAddress+uint16(idx))
-		for j := 0; j < 16 && idx+j < len(memory); j++ {
-			fmt.Printf("%02x ", memory[idx+j])
-		}
-		fmt.Println()
 	}
 }

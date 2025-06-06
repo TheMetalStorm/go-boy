@@ -1,7 +1,6 @@
 package cpu
 
 import (
-	"fmt"
 	"go-boy/mmap"
 )
 
@@ -166,20 +165,6 @@ func getHigher4(orig uint8) uint8 {
 
 func getLower4(orig uint8) uint8 {
 	return uint8(orig & 0x0f)
-}
-
-func (cpu *Cpu) DumpRegs() {
-	fmt.Printf("Registers:\n\n")
-	fmt.Printf("A: 0x%02X\n", cpu.A)
-	fmt.Printf("F: 0x%02X\n", cpu.F)
-	fmt.Printf("B: 0x%02X\n", cpu.B)
-	fmt.Printf("C: 0x%02X\n", cpu.C)
-	fmt.Printf("D: 0x%02X\n", cpu.D)
-	fmt.Printf("E: 0x%02X\n", cpu.E)
-	fmt.Printf("H: 0x%02X\n", cpu.H)
-	fmt.Printf("L: 0x%02X\n", cpu.L)
-	fmt.Printf("SP: 0x%04X\n", cpu.SP)
-	fmt.Printf("PC: 0x%04X\n", cpu.PC)
 }
 
 func (cpu *Cpu) GetAF() uint16 {
