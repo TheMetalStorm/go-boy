@@ -1057,7 +1057,7 @@ func (cpu *Cpu) retIf(cond bool) (cycles uint64) {
 
 		cpu.PC = newPC
 
-		return 4
+		return 5
 	} else {
 		cpu.PC++
 		return 2
@@ -1070,6 +1070,7 @@ func (cpu *Cpu) pop16(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles uint64) {
 
 	readLow, _ := cpu.Memory.ReadByteAt(cpu.SP)
 	*lowerRegPtr = readLow
+	// *lowerRegPtr &= 0xf0
 	cpu.SP++
 
 	readHigh, _ := cpu.Memory.ReadByteAt(cpu.SP)

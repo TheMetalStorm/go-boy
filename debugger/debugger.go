@@ -305,12 +305,10 @@ func (d *Debugger) SetEmu(emu *Emulator) {
 	d.e = emu
 }
 
-func (d *Debugger) StartDebugger() {
-
-}
-
 func (d *Debugger) RunEmulator() {
 	for {
+		d.e.SerialOut()
+
 		// if d.e.Cpu.Stop {
 		// 	continue
 		// }

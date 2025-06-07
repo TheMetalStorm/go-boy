@@ -38,22 +38,23 @@ func (e *Emulator) Restart() {
 	e.Cpu.Restart()
 	e.ranMCyclesThisFrame = 0
 
-	e.currentGame = rom.NewRom("./testroms/blargg/cpu_instrs/individual/10-bit ops.gb")
+	e.currentGame = rom.NewRom("./testroms/blargg/cpu_instrs/individual/11-op a,(hl).gb")
 	//e.currentGame = rom.NewRom("./games/tetris.gb")
 	e.LoadRom(e.currentGame)
 }
 
 func (e *Emulator) LoadRom(r *Rom) {
-	// TODO: for now only fills bank 0
-	for i := 0x0; i <= 0x3fff; i++ {
+	// TODO: for now only fills bank 0 + 1, no  Memory Bank Controllers (MBCs)
+	for i := 0x0; i <= 0x7fff; i++ {
 		newVal, _ := r.ReadByteAt(uint16(i))
 		e.Cpu.Memory.SetValue(uint16(i), newVal)
 	}
 }
 
 func (e *Emulator) Run() {
-	e.serialOut()
 	for {
+		e.SerialOut()
+
 		// if e.Cpu.Stop {
 		// 	continue
 		// }
@@ -120,11 +121,11 @@ func (e *Emulator) refreshScreen() {
 	e.screen.Update()
 }
 
-func (e *Emulator) serialOut() {
+func (e *Emulator) SerialOut() {
 	read, _ := e.Cpu.Memory.ReadByteAt(0xff02)
 	if read == 0x81 {
 		ch, _ := e.Cpu.Memory.ReadByteAt(0xff01)
-		print(ch)
+		print(string(ch))
 		e.Cpu.Memory.SetValue(0xff02, 0x00)
 
 	}
