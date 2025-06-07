@@ -33,16 +33,16 @@ func (cpu *Cpu) handleCB() (cycles uint64) {
 			return cpu.cbRr(Reg8(operand))
 		case 4:
 			// sla r8
-			return 0
+			return cpu.cbSla(Reg8(operand))
 		case 5:
 			// sra r8
-			return 0
+			return cpu.cbSra(Reg8(operand))
 		case 6:
 			// swap r8
-			return 0
+			return cpu.cbSwap(Reg8(operand))
 		case 7:
 			//srl r8
-			return 0
+			return cpu.cbSrl(Reg8(operand))
 		default:
 			//No Opportunity for missing instructions
 			return 0
@@ -62,8 +62,48 @@ func (cpu *Cpu) handleCB() (cycles uint64) {
 	}
 }
 
-// case 0x11:
-//	return cpu.cbRegRotateLeftWithCarryInBit0(&cpu.C)
+func (cpu *Cpu) cbSwap(operand Reg8) uint64 {
+	var ptr *uint8
+
+	switch operand {
+	case REG_A:
+		ptr = &cpu.A
+	case REG_B:
+		ptr = &cpu.B
+	case REG_C:
+		ptr = &cpu.C
+	case REG_D:
+		ptr = &cpu.D
+	case REG_E:
+		ptr = &cpu.E
+	case REG_H:
+		ptr = &cpu.H
+	case REG_L:
+		ptr = &cpu.L
+	case REG_MEM_HL:
+		regVal, _ := cpu.Memory.ReadByteAt(cpu.GetHL())
+		lower := getLower4(regVal)
+		higher := getHigher4(regVal)
+		regVal = lower<<4 | higher
+		cpu.Memory.SetValue(cpu.GetHL(), regVal)
+
+		cpu.SetZeroFlag(regVal == 0)
+		cpu.SetSubFlag(false)
+		cpu.SetHalfCarryFlag(false)
+		cpu.SetCarryFlag(false)
+		return 4
+	}
+
+	lower := getLower4(*ptr)
+	higher := getHigher4(*ptr)
+	*ptr = lower<<4 | higher
+
+	cpu.SetZeroFlag(*ptr == 0)
+	cpu.SetSubFlag(false)
+	cpu.SetHalfCarryFlag(false)
+	cpu.SetCarryFlag(false)
+	return 2
+}
 
 func (cpu *Cpu) cbBit(bitIndex uint8, operand Reg8) uint64 {
 
@@ -330,6 +370,139 @@ func (cpu *Cpu) cbRr(operand Reg8) uint64 {
 	newCarry := mmap.GetBit(*ptr, 0)
 	*ptr >>= 1
 	mmap.SetBit(ptr, 7, cpu.GetCarryFlag() == 1)
+
+	cpu.SetZeroFlag(*ptr == 0)
+	cpu.SetSubFlag(false)
+	cpu.SetHalfCarryFlag(false)
+	cpu.SetCarryFlag(newCarry)
+
+	return 2
+}
+
+func (cpu *Cpu) cbSla(operand Reg8) uint64 {
+
+	var ptr *uint8
+
+	switch operand {
+	case REG_A:
+		ptr = &cpu.A
+	case REG_B:
+		ptr = &cpu.B
+	case REG_C:
+		ptr = &cpu.C
+	case REG_D:
+		ptr = &cpu.D
+	case REG_E:
+		ptr = &cpu.E
+	case REG_H:
+		ptr = &cpu.H
+	case REG_L:
+		ptr = &cpu.L
+	case REG_MEM_HL:
+		regVal, _ := cpu.Memory.ReadByteAt(cpu.GetHL())
+		newCarry := mmap.GetBit(regVal, 7)
+		regVal <<= 1
+		mmap.SetBit(&regVal, 0, false)
+		cpu.Memory.SetValue(cpu.GetHL(), regVal)
+
+		cpu.SetZeroFlag(regVal == 0)
+		cpu.SetSubFlag(false)
+		cpu.SetHalfCarryFlag(false)
+		cpu.SetCarryFlag(newCarry)
+		return 4
+	}
+
+	newCarry := mmap.GetBit(*ptr, 7)
+	*ptr <<= 1
+	mmap.SetBit(ptr, 0, false)
+
+	cpu.SetZeroFlag(*ptr == 0)
+	cpu.SetSubFlag(false)
+	cpu.SetHalfCarryFlag(false)
+	cpu.SetCarryFlag(newCarry)
+
+	return 2
+}
+
+func (cpu *Cpu) cbSrl(operand Reg8) uint64 {
+
+	var ptr *uint8
+
+	switch operand {
+	case REG_A:
+		ptr = &cpu.A
+	case REG_B:
+		ptr = &cpu.B
+	case REG_C:
+		ptr = &cpu.C
+	case REG_D:
+		ptr = &cpu.D
+	case REG_E:
+		ptr = &cpu.E
+	case REG_H:
+		ptr = &cpu.H
+	case REG_L:
+		ptr = &cpu.L
+	case REG_MEM_HL:
+		regVal, _ := cpu.Memory.ReadByteAt(cpu.GetHL())
+		newCarry := mmap.GetBit(regVal, 0)
+		regVal >>= 1
+		mmap.SetBit(&regVal, 7, false)
+		cpu.Memory.SetValue(cpu.GetHL(), regVal)
+
+		cpu.SetZeroFlag(regVal == 0)
+		cpu.SetSubFlag(false)
+		cpu.SetHalfCarryFlag(false)
+		cpu.SetCarryFlag(newCarry)
+		return 4
+	}
+
+	newCarry := mmap.GetBit(*ptr, 0)
+	*ptr >>= 1
+	mmap.SetBit(ptr, 7, false)
+
+	cpu.SetZeroFlag(*ptr == 0)
+	cpu.SetSubFlag(false)
+	cpu.SetHalfCarryFlag(false)
+	cpu.SetCarryFlag(newCarry)
+
+	return 2
+}
+
+func (cpu *Cpu) cbSra(operand Reg8) uint64 {
+
+	var ptr *uint8
+
+	switch operand {
+	case REG_A:
+		ptr = &cpu.A
+	case REG_B:
+		ptr = &cpu.B
+	case REG_C:
+		ptr = &cpu.C
+	case REG_D:
+		ptr = &cpu.D
+	case REG_E:
+		ptr = &cpu.E
+	case REG_H:
+		ptr = &cpu.H
+	case REG_L:
+		ptr = &cpu.L
+	case REG_MEM_HL:
+		regVal, _ := cpu.Memory.ReadByteAt(cpu.GetHL())
+		newCarry := mmap.GetBit(regVal, 0)
+		regVal >>= 1
+		cpu.Memory.SetValue(cpu.GetHL(), regVal)
+
+		cpu.SetZeroFlag(regVal == 0)
+		cpu.SetSubFlag(false)
+		cpu.SetHalfCarryFlag(false)
+		cpu.SetCarryFlag(newCarry)
+		return 4
+	}
+
+	newCarry := mmap.GetBit(*ptr, 0)
+	*ptr >>= 1
 
 	cpu.SetZeroFlag(*ptr == 0)
 	cpu.SetSubFlag(false)

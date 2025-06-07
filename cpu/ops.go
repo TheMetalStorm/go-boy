@@ -34,18 +34,21 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		}
 		return 1
 
-	// //Stop
-	// case 0x10:
-	// 	cpu.PC++
-	// 	read, skip := cpu.Memory.ReadByteAt(cpu.PC)
-	// 	if read == 0x00 {
-	// 		cpu.Stop = true
-	// 		cpu.PC += skip
-	// 		return 1
-	// 	}
-	// 	fmt.Printf("ERROR at PC 0x%04x: 0x%02x is not a valid stop instruction! Stop instruction should be 0x1000, but found 0x%04x\n", cpu.PC, instr, read)
-	// 	os.Exit(0)
-	// 	return 0
+	//Stop
+	case 0x10:
+		cpu.PC++
+		read, _ := cpu.Memory.ReadByteAt(cpu.PC)
+		if read == 0x00 {
+			fmt.Printf("ERROR at PC 0x%04x: we do not handle Stop Instruction right now :(\n", cpu.PC)
+			os.Exit(0)
+			return 0
+			// cpu.Stop = true
+			// cpu.PC += skip
+			// return 1
+		}
+		fmt.Printf("ERROR at PC 0x%04x: 0x%02x is not a valid stop instruction! Stop instruction should be 0x1000, but found 0x%04x\n", cpu.PC, instr, read)
+		os.Exit(0)
+		return 0
 
 	//SCF
 	case 0x37:

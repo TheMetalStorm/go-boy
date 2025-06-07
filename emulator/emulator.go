@@ -38,7 +38,7 @@ func (e *Emulator) Restart() {
 	e.Cpu.Restart()
 	e.ranMCyclesThisFrame = 0
 
-	e.currentGame = rom.NewRom("./testroms/blargg/cpu_instrs/individual/11-op a,(hl).gb")
+	e.currentGame = rom.NewRom("./testroms/blargg/cpu_instrs/individual/10-bit ops.gb")
 	//e.currentGame = rom.NewRom("./games/tetris.gb")
 	e.LoadRom(e.currentGame)
 }
