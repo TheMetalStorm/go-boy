@@ -50,6 +50,35 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		os.Exit(0)
 		return 0
 
+	//DAA
+	//https://github.com/guigzzz/GoGB/blob/master/backend/cpu_arithmetic.go#L349
+	case 0x27:
+		cpu.PC++
+
+		val := cpu.A
+		if cpu.GetSubFlag() == 0 {
+			if cpu.GetHalfCarryFlag() == 1 || (val&0x0f) > 0x09 {
+				val += 0x06
+			}
+			if cpu.GetCarryFlag() == 1 || val > 0x9f {
+				val += 0x60
+				cpu.SetCarryFlag(true)
+			}
+		} else {
+			if cpu.GetHalfCarryFlag() == 1 {
+				val -= 0x6
+			}
+
+			if cpu.GetCarryFlag() == 1 {
+				val -= 0x60
+			}
+		}
+		cpu.A = val
+
+		cpu.SetZeroFlag(val&0x99 == 0)
+		cpu.SetHalfCarryFlag(false)
+		return 1
+
 	//SCF
 	case 0x37:
 		cpu.PC++
