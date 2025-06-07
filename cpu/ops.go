@@ -885,13 +885,13 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 
 	// pop 16
 	case 0xc1:
-		return cpu.pop16(&cpu.B, &cpu.C)
+		return cpu.pop16(&cpu.B, &cpu.C, false)
 	case 0xd1:
-		return cpu.pop16(&cpu.D, &cpu.E)
+		return cpu.pop16(&cpu.D, &cpu.E, false)
 	case 0xe1:
-		return cpu.pop16(&cpu.H, &cpu.L)
+		return cpu.pop16(&cpu.H, &cpu.L, false)
 	case 0xf1:
-		return cpu.pop16(&cpu.A, &cpu.F)
+		return cpu.pop16(&cpu.A, &cpu.F, true)
 
 	// ie
 	case 0xfb:
@@ -1009,25 +1009,23 @@ func (cpu *Cpu) rst(newPC uint8) (cycles uint64) {
 func (cpu *Cpu) addToHL(reg Reg16) (cycles uint64) {
 	cpu.PC++
 
+	oldHL := cpu.GetHL()
 	var op uint16
 	switch reg {
 	case REG_BC:
 		op = cpu.GetBC()
-		cpu.SetHL(cpu.GetHL() + cpu.GetBC())
 	case REG_DE:
 		op = cpu.GetDE()
-		cpu.SetHL(cpu.GetHL() + cpu.GetDE())
 	case REG_HL:
 		op = cpu.GetHL()
-		cpu.SetHL(cpu.GetHL() + cpu.GetHL())
 	case REG_SP:
 		op = cpu.SP
-		cpu.SetHL(cpu.GetHL() + cpu.SP)
 	}
 
 	cpu.SetSubFlag(false)
-	cpu.SetCarryFlag(isCarryFlagAddition16(cpu.GetHL(), op))
-	cpu.SetHalfCarryFlag(isHalfCarryFlagAddition16(cpu.GetHL(), op))
+	cpu.SetHalfCarryFlag(isHalfCarryFlagAddition16(oldHL, op))
+	cpu.SetCarryFlag(isCarryFlagAddition16(oldHL, op))
+	cpu.SetHL(oldHL + op)
 
 	return 2
 }
@@ -1065,12 +1063,14 @@ func (cpu *Cpu) retIf(cond bool) (cycles uint64) {
 
 }
 
-func (cpu *Cpu) pop16(higherRegPtr *uint8, lowerRegPtr *uint8) (cycles uint64) {
+func (cpu *Cpu) pop16(higherRegPtr *uint8, lowerRegPtr *uint8, isAF bool) (cycles uint64) {
 	cpu.PC++
 
 	readLow, _ := cpu.Memory.ReadByteAt(cpu.SP)
 	*lowerRegPtr = readLow
-	// *lowerRegPtr &= 0xf0
+	if isAF {
+		*lowerRegPtr &= 0b11110000
+	}
 	cpu.SP++
 
 	readHigh, _ := cpu.Memory.ReadByteAt(cpu.SP)
