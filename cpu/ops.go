@@ -889,9 +889,9 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		//similiar to cbRegRotateLeft (other numBytes, numCycles and different flags)
 	case 0x17:
 		cpu.PC++
-		newCarry := mmap.GetBit(cpu.A, 7)
 
-		cpu.A = cpu.A << 1
+		newCarry := mmap.GetBit(cpu.A, 7)
+		cpu.A <<= 1
 		mmap.SetBit(&cpu.A, 0, cpu.GetCarryFlag() == 1)
 
 		cpu.SetZeroFlag(false)
@@ -906,7 +906,7 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		cpu.PC++
 
 		newCarry := mmap.GetBit(cpu.A, 0)
-		cpu.A = cpu.A >> 1
+		cpu.A >>= 1
 		mmap.SetBit(&cpu.A, 7, newCarry)
 
 		cpu.SetZeroFlag(false)
@@ -921,7 +921,7 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		cpu.PC++
 		newCarry := mmap.GetBit(cpu.A, 0)
 
-		cpu.A = cpu.A >> 1
+		cpu.A >>= 1
 		mmap.SetBit(&cpu.A, 7, cpu.GetCarryFlag() == 1)
 
 		cpu.SetZeroFlag(false)
