@@ -3,11 +3,14 @@
 package emulator
 
 import (
+	"fmt"
 	"go-boy/cpu"
 	"go-boy/ioregs"
 	"go-boy/mmap"
 	"go-boy/rom"
 	"go-boy/screen"
+	"os"
+	"time"
 )
 
 type Rom = rom.Rom
@@ -38,7 +41,7 @@ func (e *Emulator) Restart() {
 	e.Cpu.Restart()
 	e.ranMCyclesThisFrame = 0
 
-	e.currentGame = rom.NewRom("./testroms/blargg/cpu_instrs/individual/09-op r,r.gb")
+	e.currentGame = rom.NewRom("./testroms/blargg/cpu_instrs/individual/01-special.gb")
 	//e.currentGame = rom.NewRom("./games/tetris.gb")
 	e.LoadRom(e.currentGame)
 }
@@ -51,13 +54,41 @@ func (e *Emulator) LoadRom(r *Rom) {
 	}
 }
 
+func (e *Emulator) RunTests(tests []string) {
+
+	var startNext bool = false
+	go changeBool(&startNext)
+	for _, test := range tests {
+		fmt.Printf("Running test: %s\n", test)
+		startNext = false
+		e.Restart()
+		e.currentGame = rom.NewRom(test)
+		e.LoadRom(e.currentGame)
+		for {
+			if startNext {
+				break
+			}
+			e.SerialOut()
+			e.Step()
+		}
+	}
+	os.Exit(0)
+
+}
+
+func changeBool(startNextTest *bool) {
+	for range time.Tick(time.Second * 2) {
+		println("")
+		*startNextTest = true
+	}
+}
+
 func (e *Emulator) Run() {
 	for {
-		e.SerialOut()
-
 		// if e.Cpu.Stop {
 		// 	continue
 		// }
+		e.SerialOut()
 		e.Step()
 	}
 }
