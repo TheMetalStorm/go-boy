@@ -593,16 +593,9 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0x8d:
 		return cpu.addWithCarryToRegA(cpu.L)
 	case 0x8e:
-		oldVal := cpu.A
-		addVal, skip := cpu.Memory.ReadByteAt(cpu.GetHL())
-		addVal += cpu.GetCarryFlag()
-		cpu.A += addVal
-		cpu.PC += skip
 
-		cpu.SetZeroFlag(cpu.A == 0)
-		cpu.SetSubFlag(false)
-		cpu.SetCarryFlag(isCarryFlagAddition(oldVal, addVal))
-		cpu.SetHalfCarryFlag(isHalfCarryFlagAddition(oldVal, addVal))
+		read, _ := cpu.Memory.ReadByteAt(cpu.GetHL())
+		cpu.addWithCarryToRegA(read)
 
 		return 2
 	case 0x8f:
@@ -1022,10 +1015,11 @@ func (cpu *Cpu) addToHL(reg Reg16) (cycles uint64) {
 		op = cpu.SP
 	}
 
+	cpu.SetHL(oldHL + op)
+
 	cpu.SetSubFlag(false)
 	cpu.SetHalfCarryFlag(isHalfCarryFlagAddition16(oldHL, op))
 	cpu.SetCarryFlag(isCarryFlagAddition16(oldHL, op))
-	cpu.SetHL(oldHL + op)
 
 	return 2
 }
@@ -1332,13 +1326,15 @@ func (cpu *Cpu) addWithCarryToRegA(regVal uint8) (cycles uint64) {
 	cpu.PC++
 
 	oldVal := cpu.A
-	addVal := regVal + cpu.GetCarryFlag()
-	cpu.A += addVal
+	addVal := regVal
+	carry := cpu.GetCarryFlag()
+	cpu.A += addVal + carry
 
 	cpu.SetZeroFlag(cpu.A == 0)
 	cpu.SetSubFlag(false)
-	cpu.SetCarryFlag(isCarryFlagAddition(oldVal, addVal))
-	cpu.SetHalfCarryFlag(isHalfCarryFlagAddition(oldVal, addVal))
+
+	cpu.SetCarryFlag((uint16(oldVal) + uint16(addVal) + uint16(carry)) > 0xFF)
+	cpu.SetHalfCarryFlag(((oldVal & 0xF) + (addVal & 0xF) + carry) > 0xF)
 
 	return 1
 
@@ -1362,13 +1358,14 @@ func (cpu *Cpu) subFromRegA(regVal uint8) (cycles uint64) {
 func (cpu *Cpu) subWithCarryFromRegA(regVal uint8) (cycles uint64) {
 
 	oldVal := cpu.A
-	subVal := regVal + cpu.GetCarryFlag()
-	cpu.A -= subVal
+	subVal := regVal
+	carry := +cpu.GetCarryFlag()
+	cpu.A -= subVal + carry
 
 	cpu.SetZeroFlag(cpu.A == 0)
 	cpu.SetSubFlag(true)
-	cpu.SetCarryFlag(isCarryFlagSubtraction(oldVal, subVal))
-	cpu.SetHalfCarryFlag(isHalfCarryFlagSubtraction(oldVal, subVal))
+	cpu.SetCarryFlag((uint16(oldVal) - uint16(subVal) - uint16(carry)) > 0xFF)
+	cpu.SetHalfCarryFlag(((oldVal & 0xF) - (subVal & 0xF) - carry) > 0xF)
 
 	cpu.PC++
 	return 1

@@ -469,6 +469,7 @@ func (cpu *Cpu) cbSrl(operand Reg8) uint64 {
 	return 2
 }
 
+// TODO wrong
 func (cpu *Cpu) cbSra(operand Reg8) uint64 {
 
 	var ptr *uint8
