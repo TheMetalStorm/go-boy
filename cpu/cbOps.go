@@ -469,7 +469,6 @@ func (cpu *Cpu) cbSrl(operand Reg8) uint64 {
 	return 2
 }
 
-// TODO wrong
 func (cpu *Cpu) cbSra(operand Reg8) uint64 {
 
 	var ptr *uint8
@@ -492,7 +491,9 @@ func (cpu *Cpu) cbSra(operand Reg8) uint64 {
 	case REG_MEM_HL:
 		regVal, _ := cpu.Memory.ReadByteAt(cpu.GetHL())
 		newCarry := mmap.GetBit(regVal, 0)
+		oldMSB := mmap.GetBit(regVal, 7)
 		regVal >>= 1
+		mmap.SetBit(&regVal, 7, oldMSB)
 		cpu.Memory.SetValue(cpu.GetHL(), regVal)
 
 		cpu.SetZeroFlag(regVal == 0)
@@ -503,7 +504,9 @@ func (cpu *Cpu) cbSra(operand Reg8) uint64 {
 	}
 
 	newCarry := mmap.GetBit(*ptr, 0)
+	oldMSB := mmap.GetBit(*ptr, 7)
 	*ptr >>= 1
+	mmap.SetBit(ptr, 7, oldMSB)
 
 	cpu.SetZeroFlag(*ptr == 0)
 	cpu.SetSubFlag(false)
