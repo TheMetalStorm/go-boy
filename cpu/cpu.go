@@ -128,10 +128,10 @@ func isHalfCarryFlagSubtraction(valA uint8, valB uint8) bool {
 
 func isHalfCarryFlagSubtraction16(valA uint16, valB uint16) bool {
 
-	lowerA := GetLower8(valA)
-	lowerB := GetLower8(valB)
+	tempA := valA & 0xFFF
+	tempB := valB & 0xFFF
 
-	return isHalfCarryFlagSubtraction(lowerA, lowerB)
+	return tempB > tempA
 
 }
 
@@ -145,10 +145,10 @@ func isHalfCarryFlagAddition(valA uint8, valB uint8) bool {
 
 func isHalfCarryFlagAddition16(valA uint16, valB uint16) bool {
 
-	lowerA := GetLower8(valA)
-	lowerB := GetLower8(valB)
+	tempA := valA & 0xFFF
+	tempB := valB & 0xFFF
 
-	return isCarryFlagAddition(lowerA, lowerB)
+	return (uint32(tempA) + uint32(tempB)) > 0xFFF
 }
 
 func GetHigher8(orig uint16) uint8 {

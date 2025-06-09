@@ -14,7 +14,6 @@ func (cpu *Cpu) handleCB() (cycles uint64) {
 
 	switch instr {
 
-	//RES
 	case 0:
 		actualInstr := (data >> 3) & 0x1f
 		switch actualInstr {
@@ -163,7 +162,7 @@ func (cpu *Cpu) cbResetRegBit(bitIndex uint8, operand Reg8) uint64 {
 		ptr = &cpu.L
 	case REG_MEM_HL:
 		addr, _ := cpu.Memory.ReadByteAt(cpu.GetHL())
-		mmap.SetBit(&addr, 0, false)
+		mmap.SetBit(&addr, bitIndex, false)
 		cpu.Memory.SetValue(cpu.GetHL(), addr)
 		return 4
 	}
@@ -191,7 +190,7 @@ func (cpu *Cpu) cbSetRegBit(bitIndex uint8, operand Reg8) uint64 {
 		ptr = &cpu.L
 	case REG_MEM_HL:
 		regVal, _ := cpu.Memory.ReadByteAt(cpu.GetHL())
-		mmap.SetBit(&regVal, 0, true)
+		mmap.SetBit(&regVal, bitIndex, true)
 		cpu.Memory.SetValue(cpu.GetHL(), regVal)
 		return 4
 	}

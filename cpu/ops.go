@@ -139,52 +139,34 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0xe8:
 		cpu.PC++
 		imm, skip := cpu.Memory.ReadByteAt(cpu.PC)
-
-		signedImm := int8(imm)
 		cpu.PC += skip
 
-		if signedImm >= 0 {
-			cpu.SP += uint16(signedImm)
-			cpu.SetHalfCarryFlag(isHalfCarryFlagAddition16(cpu.SP, uint16(signedImm)))
-			cpu.SetCarryFlag(isCarryFlagAddition16(cpu.SP, uint16(signedImm)))
-		} else {
-			signedAbs := uint16(math.Abs(float64(signedImm)))
-
-			cpu.SP -= signedAbs
-			cpu.SetHalfCarryFlag(isHalfCarryFlagSubtraction16(cpu.SP, signedAbs))
-			cpu.SetCarryFlag(isCarryFlagSubtraction16(cpu.SP, signedAbs))
-		}
-		return 4
-	//LD HL. SP + s8
-	case 0xF8:
-		cpu.PC++
-		imm, skip := cpu.Memory.ReadByteAt(cpu.PC)
-
 		signedImm := int8(imm)
-		cpu.PC += skip
-
-		var res uint16
 
 		cpu.SetZeroFlag(false)
 		cpu.SetSubFlag(false)
 
-		if signedImm >= 0 {
-			res = cpu.SP + uint16(signedImm)
+		cpu.SetHalfCarryFlag(isHalfCarryFlagAddition(uint8(cpu.SP), imm))
+		cpu.SetCarryFlag(isCarryFlagAddition(uint8(cpu.SP), imm))
+		cpu.SP = uint16(int16(cpu.SP) + int16(signedImm))
 
-			cpu.SetHalfCarryFlag(isHalfCarryFlagAddition16(cpu.SP, uint16(signedImm)))
-			cpu.SetCarryFlag(isCarryFlagAddition16(cpu.SP, uint16(signedImm)))
-		} else {
-			// get absolute value go
+		return 4
+	//LD HL. SP + s8
 
-			signedAbs := uint16(math.Abs(float64(signedImm)))
+	case 0xF8:
+		cpu.PC++
+		imm, skip := cpu.Memory.ReadByteAt(cpu.PC)
+		cpu.PC += skip
 
-			res = cpu.SP - signedAbs
+		signedImm := int8(imm)
 
-			cpu.SetHalfCarryFlag(isHalfCarryFlagSubtraction16(cpu.SP, signedAbs))
-			cpu.SetCarryFlag(isCarryFlagSubtraction16(cpu.SP, signedAbs))
-		}
+		cpu.SetZeroFlag(false)
+		cpu.SetSubFlag(false)
 
-		cpu.SetHL(res)
+		cpu.SetHalfCarryFlag(isHalfCarryFlagAddition(uint8(cpu.SP), imm))
+		cpu.SetCarryFlag(isCarryFlagAddition(uint8(cpu.SP), imm))
+		cpu.SetHL(uint16(int16(cpu.SP) + int16(signedImm)))
+
 		return 3
 
 	//LD SP, HL
@@ -656,17 +638,8 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0x9d:
 		return cpu.subWithCarryFromRegA(cpu.L)
 	case 0x9e:
-		oldVal := cpu.A
-		subVal, skip := cpu.Memory.ReadByteAt(cpu.GetHL())
-		subVal += cpu.GetCarryFlag()
-		cpu.A -= subVal
-		cpu.PC += skip
-
-		cpu.SetZeroFlag(cpu.A == 0)
-		cpu.SetSubFlag(true)
-		cpu.SetCarryFlag(isCarryFlagSubtraction(oldVal, subVal))
-		cpu.SetHalfCarryFlag(isHalfCarryFlagSubtraction(oldVal, subVal))
-
+		subVal, _ := cpu.Memory.ReadByteAt(cpu.GetHL())
+		cpu.subWithCarryFromRegA(subVal)
 		return 2
 	case 0x9f:
 		return cpu.subWithCarryFromRegA(cpu.A)
@@ -1018,8 +991,8 @@ func (cpu *Cpu) addToHL(reg Reg16) (cycles uint64) {
 	cpu.SetHL(oldHL + op)
 
 	cpu.SetSubFlag(false)
-	cpu.SetHalfCarryFlag(isHalfCarryFlagAddition16(oldHL, op))
 	cpu.SetCarryFlag(isCarryFlagAddition16(oldHL, op))
+	cpu.SetHalfCarryFlag(isHalfCarryFlagAddition16(oldHL, op))
 
 	return 2
 }
@@ -1359,7 +1332,7 @@ func (cpu *Cpu) subWithCarryFromRegA(regVal uint8) (cycles uint64) {
 
 	oldVal := cpu.A
 	subVal := regVal
-	carry := +cpu.GetCarryFlag()
+	carry := cpu.GetCarryFlag()
 	cpu.A -= subVal + carry
 
 	cpu.SetZeroFlag(cpu.A == 0)
