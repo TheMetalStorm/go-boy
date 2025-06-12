@@ -21,10 +21,13 @@ type Cpu struct {
 
 	Memory *Mmap
 
-	IME bool
+	IME          bool
+	setIMETrueIn int
+	pendingIME   bool
 
-	Halt bool
-	Stop bool
+	Halt    bool
+	HaltBug bool
+	Stop    bool
 }
 
 var IO_START_ADDR uint16 = 0xff00
@@ -51,6 +54,9 @@ func (cpu *Cpu) Restart() {
 	cpu.PC = 0x100
 	cpu.Halt = false
 	cpu.Stop = false
+	cpu.IME = false
+	cpu.pendingIME = false
+	cpu.setIMETrueIn = 0
 
 	cpu.Memory.SetValue(0xFF05, 0x00) // TIMA
 	cpu.Memory.SetValue(0xFF06, 0x00) // TMA
@@ -87,10 +93,21 @@ func (cpu *Cpu) Restart() {
 }
 
 func (cpu *Cpu) Step() uint64 {
+
 	instr, _ := cpu.Memory.ReadByteAt(cpu.PC)
+
 	var ranMCyclesThisStep uint64 = 1 //instr fetch  takes 1 m cycles
 	//decode/Execute
 	ranMCyclesThisStep += cpu.decodeExecute(instr)
+
+	if cpu.pendingIME {
+		if cpu.setIMETrueIn > 0 {
+			cpu.setIMETrueIn--
+		} else {
+			cpu.IME = true
+			cpu.pendingIME = false
+		}
+	}
 	return ranMCyclesThisStep
 }
 

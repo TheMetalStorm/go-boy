@@ -41,7 +41,7 @@ func (e *Emulator) Restart() {
 	e.Cpu.Restart()
 	e.ranMCyclesThisFrame = 0
 
-	e.currentGame = rom.NewRom("./testroms/blargg/cpu_instrs/individual/01-special.gb")
+	e.currentGame = rom.NewRom("./testroms/blargg/halt_bug.gb")
 	//e.currentGame = rom.NewRom("./games/tetris.gb")
 	e.LoadRom(e.currentGame)
 }
@@ -99,7 +99,7 @@ func (e *Emulator) Step() {
 	ranMCyclesThisStep += e.handleInterrupts()
 
 	if !e.Cpu.Halt {
-		ranMCyclesThisStep = e.Cpu.Step()
+		ranMCyclesThisStep += e.Cpu.Step()
 	}
 
 	e.updateTimers(ranMCyclesThisStep)
@@ -108,17 +108,19 @@ func (e *Emulator) Step() {
 	e.ranMCyclesThisFrame += ranMCyclesThisStep
 
 }
-
-// TODO: The effect of ei is delayed by one instruction. This means that ei followed immediately by di does not allow any interrupts between them.
-// This interacts with the halt bug in an interesting way.
-// https://gbdev.io/pandocs/Interrupts.html#ffff--ie-interrupt-enable
 func (e *Emulator) handleInterrupts() uint64 {
 	requestedInterrupts := e.Cpu.Memory.Io.GetIF()
-	enabledInterrupts := e.Cpu.Memory.Ie
+	enabledInterrupts := e.Cpu.Memory.GetIe()
+	activeInterrupts := requestedInterrupts & enabledInterrupts & 0x1f
+	if activeInterrupts != 0 {
+		e.Cpu.Halt = false
+		//return 4
+
+	}
+
 	if e.Cpu.IME {
 
-		if requestedInterrupts&enabledInterrupts > 0 {
-			e.Cpu.IME = false
+		if requestedInterrupts&enabledInterrupts&0x1f != 0 {
 
 			e.Cpu.SP--
 			e.Cpu.Memory.SetValue(e.Cpu.SP, cpu.GetHigher8(e.Cpu.PC))
@@ -141,9 +143,14 @@ func (e *Emulator) handleInterrupts() uint64 {
 				e.Cpu.Memory.Io.SetInterruptFlagBit(ioregs.JOYPAD, false)
 				e.Cpu.PC = 0x0060
 			}
-			e.Cpu.Halt = false
+			e.Cpu.IME = false
+			// if e.Cpu.Halt {
+			// 	e.Cpu.Halt = false
+			// 	return 6
+			// }
 			return 5
 		}
+
 	}
 	return 0
 }
