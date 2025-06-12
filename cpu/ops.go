@@ -55,10 +55,10 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0x27:
 		cpu.PC++
 
-		val := cpu.A
+		val := uint16(cpu.A)
 		if cpu.GetSubFlag() == 0 {
 			if cpu.GetHalfCarryFlag() == 1 || (val&0x0f) > 0x09 {
-				val += 0x06
+				val += 0x6
 			}
 			if cpu.GetCarryFlag() == 1 || val > 0x9f {
 				val += 0x60
@@ -73,10 +73,11 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 				val -= 0x60
 			}
 		}
-		cpu.A = val
 
-		cpu.SetZeroFlag(val&0x99 == 0)
+		cpu.SetZeroFlag(val&0xFF == 0)
 		cpu.SetHalfCarryFlag(false)
+
+		cpu.A = uint8(val)
 		return 1
 
 	//SCF
