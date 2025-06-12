@@ -18,20 +18,10 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return 1
 
 	//HALT
-	//NOTE: THANKS CHATGPT
 	case 0x76:
 		cpu.PC++
+		cpu.Halt = true
 
-		if !cpu.IME {
-			if cpu.Memory.GetIe()&cpu.Memory.Io.GetIF() != 0 {
-				// HALT BUG TRIGGERED: Skip next instruction!
-				cpu.PC++
-			} else {
-				cpu.Halt = true
-			}
-		} else {
-			cpu.Halt = true
-		}
 		return 1
 
 	//Stop
@@ -860,13 +850,16 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 	case 0xf1:
 		return cpu.pop16(&cpu.A, &cpu.F, true)
 
-	// ie
+	//ei
 	case 0xfb:
 		cpu.PC++
-		cpu.IME = true
+		cpu.pendingIME = true
+		cpu.setIMETrueIn = 1
 		return 1
+	//di
 	case 0xf3:
 		cpu.PC++
+		cpu.pendingIME = false
 		cpu.IME = false
 		return 1
 
