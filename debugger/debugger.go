@@ -114,11 +114,11 @@ func StartLoop(d *Debugger) func() {
 					),
 
 					g.TabItem("Wram1").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.GetWram1(), 0xc000)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRowsDebuggable(d.e.Cpu.Memory.GetWram1(), 0xc000)...),
 					),
 
 					g.TabItem("Wram2").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.GetWram2(), 0xd000)...),
+						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRowsDebuggable(d.e.Cpu.Memory.GetWram2(), 0xd000)...),
 					),
 
 					g.TabItem("Oam").Layout(
