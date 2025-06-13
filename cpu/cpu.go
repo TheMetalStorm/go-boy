@@ -100,7 +100,7 @@ func (cpu *Cpu) Step() uint64 {
 	instr, _ := cpu.Memory.ReadByteAt(cpu.PC)
 
 	if !cpu.Halt && cpu.LogFile != nil {
-		cpu.log()
+		cpu.logStep()
 	}
 
 	var ranMCyclesThisStep uint64 = 1 //instr fetch  takes 1 m cycles
@@ -118,7 +118,7 @@ func (cpu *Cpu) Step() uint64 {
 	return ranMCyclesThisStep
 }
 
-func (cpu *Cpu) log() {
+func (cpu *Cpu) logStep() {
 
 	pc1, _ := cpu.Memory.ReadByteAt(cpu.PC)
 	pc2, _ := cpu.Memory.ReadByteAt(cpu.PC + 1)
