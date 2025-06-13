@@ -98,9 +98,9 @@ func (cpu *Cpu) Step() uint64 {
 
 	instr, _ := cpu.Memory.ReadByteAt(cpu.PC)
 
-	// if !cpu.Halt {
-	// 	cpu.log()
-	// }
+	if !cpu.Halt {
+		cpu.log()
+	}
 
 	var ranMCyclesThisStep uint64 = 1 //instr fetch  takes 1 m cycles
 	//decode/Execute
@@ -118,7 +118,7 @@ func (cpu *Cpu) Step() uint64 {
 }
 
 func (cpu *Cpu) log() {
-	f, err := os.OpenFile("gb-log2", os.O_APPEND|os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	f, err := os.OpenFile("gb-log2", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 	if err != nil {
 		panic(err)
 	}
