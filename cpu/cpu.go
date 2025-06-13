@@ -26,6 +26,7 @@ type Cpu struct {
 	IME          bool
 	setIMETrueIn int
 	pendingIME   bool
+	LogFile      *os.File
 
 	Halt    bool
 	HaltBug bool
@@ -98,7 +99,7 @@ func (cpu *Cpu) Step() uint64 {
 
 	instr, _ := cpu.Memory.ReadByteAt(cpu.PC)
 
-	if !cpu.Halt {
+	if !cpu.Halt && cpu.LogFile != nil {
 		cpu.log()
 	}
 
@@ -118,12 +119,6 @@ func (cpu *Cpu) Step() uint64 {
 }
 
 func (cpu *Cpu) log() {
-	f, err := os.OpenFile("gb-log2", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
-	if err != nil {
-		panic(err)
-	}
-
-	defer f.Close()
 
 	pc1, _ := cpu.Memory.ReadByteAt(cpu.PC)
 	pc2, _ := cpu.Memory.ReadByteAt(cpu.PC + 1)
@@ -132,7 +127,7 @@ func (cpu *Cpu) log() {
 
 	toWrite := fmt.Sprintf("A:%02x F:%02x B:%02x C:%02x D:%02x E:%02x H:%02x L:%02x SP:%04x PC:%04x PCMEM:%02x,%02x,%02x,%02x\n",
 		cpu.A, cpu.F, cpu.B, cpu.C, cpu.D, cpu.E, cpu.H, cpu.L, cpu.SP, cpu.PC, pc1, pc2, pc3, pc4)
-	if _, err = f.WriteString(toWrite); err != nil {
+	if _, err := cpu.LogFile.WriteString(toWrite); err != nil {
 		panic(err)
 	}
 }

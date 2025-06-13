@@ -40,18 +40,24 @@ func main() {
 	// f.Close()
 	isDebugMode := false
 	test := false
-
 	argsWithoutProg := os.Args[1:]
-
+	var err error
+	var logFile *os.File = nil
 	if len(argsWithoutProg) >= 1 {
 		if argsWithoutProg[0] == "--debug" {
 			isDebugMode = true
 		} else if argsWithoutProg[0] == "--test" {
 			test = true
+		} else if argsWithoutProg[0] == "--log" {
+			logFile, err = os.OpenFile("gb-log", os.O_APPEND|os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+			if err != nil {
+				panic(err)
+			}
+
 		}
 
 	}
-
+	defer logFile.Close()
 	e.Restart()
 
 	dbg := debugger.NewDebugger()
@@ -67,6 +73,7 @@ func main() {
 		if test {
 			e.RunTests(tests)
 		}
+		e.Cpu.LogFile = logFile
 		e.Run()
 	}
 
