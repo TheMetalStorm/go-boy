@@ -279,7 +279,7 @@ func (d *Debugger) OnClickMemView(addr uint16) func() {
 }
 
 func (d *Debugger) makeRegColumns() []*g.TableColumnWidget {
-	regColumns := make([]*g.TableColumnWidget, 12)
+	regColumns := make([]*g.TableColumnWidget, 13)
 	regColumns[0] = g.TableColumn(fmt.Sprintf("PC: 0x%04x", d.e.Cpu.PC))
 	regColumns[1] = g.TableColumn(fmt.Sprintf("SP: 0x%04x", d.e.Cpu.SP))
 	regColumns[2] = g.TableColumn(fmt.Sprintf("A: 0x%02x", d.e.Cpu.A))
@@ -296,6 +296,7 @@ func (d *Debugger) makeRegColumns() []*g.TableColumnWidget {
 
 	tima := d.e.Cpu.Memory.Io.GetTIMA()
 	regColumns[11] = g.TableColumn(fmt.Sprintf("TIMA: 0x%02x", tima))
+	regColumns[12] = g.TableColumn(fmt.Sprintf("HALT: 0x%t", d.e.Cpu.Halt))
 
 	return regColumns
 }

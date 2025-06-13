@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"go-boy/cpu"
 	"go-boy/ioregs"
-	"go-boy/mmap"
 	"go-boy/rom"
 	"go-boy/screen"
 	"os"
@@ -28,6 +27,9 @@ type Emulator struct {
 	currentGame *Rom
 
 	ranMCyclesThisFrame uint64
+	timerTotalMCycles   uint64
+	divMCycleCounter    uint64
+	//nextCycleCopyTmaToTima bool
 }
 
 func NewEmulator() *Emulator {
@@ -41,7 +43,8 @@ func (e *Emulator) Restart() {
 	e.Cpu.Restart()
 	e.ranMCyclesThisFrame = 0
 
-	e.currentGame = rom.NewRom("./testroms/blargg/halt_bug.gb")
+	e.currentGame = rom.NewRom("./testroms/blargg/cpu_instrs/individual/02-interrupts.gb")
+
 	//e.currentGame = rom.NewRom("./games/tetris.gb")
 	e.LoadRom(e.currentGame)
 }
@@ -120,7 +123,7 @@ func (e *Emulator) handleInterrupts() uint64 {
 
 	if e.Cpu.IME {
 
-		if requestedInterrupts&enabledInterrupts&0x1f != 0 {
+		if activeInterrupts != 0 {
 
 			e.Cpu.SP--
 			e.Cpu.Memory.SetValue(e.Cpu.SP, cpu.GetHigher8(e.Cpu.PC))
@@ -179,43 +182,63 @@ func (e *Emulator) updateTimers(mCyclesThisStep uint64) {
 // NOTE: CGB different
 // https://gbdev.gg8.se/wiki/articles/Timer_and_Divider_Registers
 func (e *Emulator) updateDivReg(mCyclesThisStep uint64) {
-	// if we crossed the 64 M Cycles boundary this Step
-	if (int(e.ranMCyclesThisFrame+mCyclesThisStep) / 64) != int(e.ranMCyclesThisFrame/64) {
+	// DIV increments every 64 M-cycles (256 T-cycles)
+	const divRate = 64
 
+	totalMCycles := e.divMCycleCounter + mCyclesThisStep
+	incr := totalMCycles / divRate             // Number of DIV increments needed
+	remainingMCycles := totalMCycles % divRate // Carry over unused cycles
+
+	if incr > 0 {
 		div := e.Cpu.Memory.Io.GetDIV()
-		e.Cpu.Memory.SetValue(0xFF04, div+1)
+		e.Cpu.Memory.SetValue(0xFF04, div+uint8(incr)) // Increment DIV
 	}
+
+	e.divMCycleCounter = remainingMCycles // Save for next step
 }
 
 func (e *Emulator) updateTimaReg(mCyclesThisStep uint64) {
-
-	tima := uint16(e.Cpu.Memory.Io.GetTIMA())
-	updatFreq := uint64(0)
-	timerControl := e.Cpu.Memory.Io.GetTAC()
-	timerEnabled := mmap.GetBit(timerControl, 2)
-	if timerEnabled {
-		switch timerControl & 0x03 {
-		case 0x00: // 00
-			updatFreq = 256
-		case 0x01: // 01
-			updatFreq = 4
-		case 0x02: // 10
-			updatFreq = 16
-		case 0x03: // 11
-			updatFreq = 64
-		}
-
-		if int(e.ranMCyclesThisFrame+mCyclesThisStep)/int(updatFreq) != int(int(e.ranMCyclesThisFrame)/int(updatFreq)) {
-			incr := int(e.ranMCyclesThisFrame+mCyclesThisStep)/int(updatFreq) - int(int(e.ranMCyclesThisFrame)/int(updatFreq))
-			tima += uint16(incr)
-			if tima > 255 { //tima overflow
-				tima = uint16(e.Cpu.Memory.Io.GetTMA())
-				e.Cpu.Memory.Io.SetInterruptFlagBit(ioregs.TIMER, true)
-
-			}
-			e.Cpu.Memory.Io.SetTIMA(uint8(tima))
-		}
+	tac := e.Cpu.Memory.Io.GetTAC()
+	if (tac & 0x04) == 0 { // Timer disabled
+		return
 	}
+
+	// Get current TIMA and divider rate
+	tima := uint16(e.Cpu.Memory.Io.GetTIMA())
+	divRate := e.getTimerDivRate(tac) // Helper function (see below)
+
+	// Calculate how many times TIMA should increment this step
+	totalMCycles := e.timerTotalMCycles + mCyclesThisStep
+	incr := totalMCycles / divRate             // Full increments
+	remainingMCycles := totalMCycles % divRate // Carry over
+
+	// Apply increments
+	if incr > 0 {
+		tima += uint16(incr)
+		if tima > 0xFF { // Handle overflow
+			tima = uint16(e.Cpu.Memory.Io.GetTMA())
+			e.Cpu.Memory.Io.SetInterruptFlagBit(ioregs.TIMER, true) // Set IF.2
+		}
+		e.Cpu.Memory.Io.SetTIMA(uint8(tima))
+	}
+
+	// Save remaining cycles for next step
+	e.timerTotalMCycles = remainingMCycles
+}
+
+// Helper: Convert TAC to M-cycle divider rate
+func (e *Emulator) getTimerDivRate(tac uint8) uint64 {
+	switch tac & 0x03 {
+	case 0x00:
+		return 256 // 1024 T-cycles = 256 M-cycles
+	case 0x01:
+		return 4 // 16 T-cycles = 4 M-cycles
+	case 0x02:
+		return 16 // 64 T-cycles = 16 M-cycles
+	case 0x03:
+		return 64 // 256 T-cycles = 64 M-cycles
+	}
+	return 0 // Invalid
 }
 
 func (e *Emulator) GetCurrentGame() []byte {

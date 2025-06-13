@@ -19,8 +19,21 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 
 	//HALT
 	case 0x76:
+
+		requestedInterrupts := cpu.Memory.Io.GetIF()
+		enabledInterrupts := cpu.Memory.GetIe()
+		activeInterrupts := requestedInterrupts & enabledInterrupts & 0x1f
+
 		cpu.PC++
-		cpu.Halt = true
+		if cpu.IME {
+			cpu.Halt = true
+		} else {
+			if activeInterrupts != 0 {
+				cpu.Halt = true
+			} else {
+				cpu.HaltBug = true
+			}
+		}
 
 		return 1
 

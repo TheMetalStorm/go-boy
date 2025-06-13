@@ -14,6 +14,8 @@ type Debugger = debugger.Debugger
 var e *Emulator = emulator.NewEmulator()
 
 var tests = []string{
+	//"./testroms/double-halt-cancel.gb",
+	//"./testroms/blargg/instr_timing/instr_timing.gb",
 	"./testroms/blargg/cpu_instrs/individual/01-special.gb",
 	"./testroms/blargg/cpu_instrs/individual/02-interrupts.gb",
 	"./testroms/blargg/cpu_instrs/individual/03-op sp,hl.gb",
@@ -28,7 +30,14 @@ var tests = []string{
 }
 
 func main() {
-
+	// f, err := os.OpenFile("gb-log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// if err := os.Truncate("./gb-log", 0); err != nil {
+	// 	os.Exit(0)
+	// }
+	// f.Close()
 	isDebugMode := false
 	test := false
 
