@@ -49,7 +49,9 @@ func main() {
 		} else if argsWithoutProg[0] == "--test" {
 			test = true
 		} else if argsWithoutProg[0] == "--log" {
-			logFile, err = os.OpenFile("gb-log", os.O_APPEND|os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+			filename := "gb-log"
+			os.Remove(filename)
+			logFile, err = os.OpenFile(filename, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 			if err != nil {
 				panic(err)
 			}
