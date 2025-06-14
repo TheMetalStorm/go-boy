@@ -737,16 +737,9 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		return cpu.binOrWithRegA(cpu.H)
 	case 0xb5:
 		return cpu.binOrWithRegA(cpu.L)
-	case 0xb6:
-		orVal, skip := cpu.Memory.ReadByteAt(cpu.GetHL())
-		cpu.A |= orVal
-		cpu.PC += skip
-
-		cpu.SetZeroFlag(cpu.A == 0)
-		cpu.SetSubFlag(false)
-		cpu.SetHalfCarryFlag(false)
-		cpu.SetCarryFlag(false)
-
+	case 0xB6:
+		orVal, _ := cpu.Memory.ReadByteAt(cpu.GetHL())
+		cpu.binOrWithRegA(orVal)
 		return 2
 	case 0xb7:
 		return cpu.binOrWithRegA(cpu.A)

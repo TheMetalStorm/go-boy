@@ -2,6 +2,7 @@ package cpu
 
 import (
 	"fmt"
+	"go-boy/ioregs"
 	"go-boy/mmap"
 	"os"
 )
@@ -27,6 +28,9 @@ type Cpu struct {
 	setIMETrueIn int
 	pendingIME   bool
 	LogFile      *os.File
+
+	timerTotalMCycles uint64
+	divMCycleCounter  uint64
 
 	Halt    bool
 	HaltBug bool
@@ -93,6 +97,76 @@ func (cpu *Cpu) Restart() {
 	cpu.Memory.SetValue(0xFF4B, 0x00) // WX
 	cpu.Memory.SetValue(0xFFFF, 0x00) // IE
 
+}
+
+func (c *Cpu) UpdateTimers(mCyclesThisStep uint64) {
+
+	c.updateDivReg(mCyclesThisStep)
+	c.updateTimaReg(mCyclesThisStep)
+
+}
+
+// NOTE: CGB different
+// https://gbdev.gg8.se/wiki/articles/Timer_and_Divider_Registers
+func (c *Cpu) updateDivReg(mCyclesThisStep uint64) {
+	// DIV increments every 64 M-cycles (256 T-cycles)
+	const divRate = 64
+
+	totalMCycles := c.divMCycleCounter + mCyclesThisStep
+	incr := totalMCycles / divRate             // Number of DIV increments needed
+	remainingMCycles := totalMCycles % divRate // Carry over unused cycles
+
+	if incr > 0 {
+		div := c.Memory.Io.GetDIV()
+		c.Memory.SetValue(0xFF04, div+uint8(incr)) // Increment DIV
+	}
+
+	c.divMCycleCounter = remainingMCycles // Save for next step
+}
+
+func (c *Cpu) updateTimaReg(mCyclesThisStep uint64) {
+	tac := c.Memory.Io.GetTAC()
+	if (tac & 0x04) == 0 { // Timer disabled
+		return
+	}
+
+	// Get current TIMA and divider rate
+	tima := uint16(c.Memory.Io.GetTIMA())
+	divRate := c.getTimerDivRate(tac) // Helper function (see below)
+
+	// Calculate how many times TIMA should increment this step
+	totalMCycles := c.timerTotalMCycles + mCyclesThisStep
+	incr := totalMCycles / divRate             // Full increments
+	remainingMCycles := totalMCycles % divRate // Carry over
+
+	// Apply increments
+	if incr > 0 {
+		tima += uint16(incr)
+		if tima > 0xFF { // Handle overflow
+			tima = uint16(c.Memory.Io.GetTMA())
+
+			c.Memory.Io.SetInterruptFlagBit(ioregs.TIMER, true) // Set IF.2
+		}
+		c.Memory.Io.SetTIMA(uint8(tima))
+	}
+
+	// Save remaining cycles for next step
+	c.timerTotalMCycles = remainingMCycles
+}
+
+// Helper: Convert TAC to M-cycle divider rate
+func (c *Cpu) getTimerDivRate(tac uint8) uint64 {
+	switch tac & 0x03 {
+	case 0x00:
+		return 256 // 1024 T-cycles = 256 M-cycles
+	case 0x01:
+		return 4 // 16 T-cycles = 4 M-cycles
+	case 0x02:
+		return 16 // 64 T-cycles = 16 M-cycles
+	case 0x03:
+		return 64 // 256 T-cycles = 64 M-cycles
+	}
+	return 0 // Invalid
 }
 
 func (cpu *Cpu) Step() uint64 {

@@ -16,6 +16,10 @@ var e *Emulator = emulator.NewEmulator()
 var tests = []string{
 	//"./testroms/double-halt-cancel.gb",
 	//"./testroms/blargg/instr_timing/instr_timing.gb",
+	"./testroms/blargg/mem_timing/individual/01-read_timing.gb",
+	"./testroms/blargg/mem_timing/individual/02-write_timing.gb",
+	"./testroms/blargg/mem_timing/individual/03-modify_timing.gb",
+
 	"./testroms/blargg/cpu_instrs/individual/01-special.gb",
 	"./testroms/blargg/cpu_instrs/individual/02-interrupts.gb",
 	"./testroms/blargg/cpu_instrs/individual/03-op sp,hl.gb",
