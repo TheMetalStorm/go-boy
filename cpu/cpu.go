@@ -144,7 +144,6 @@ func (c *Cpu) updateTimaReg(mCyclesThisStep uint64) {
 		tima += uint16(incr)
 		if tima > 0xFF { // Handle overflow
 			tima = uint16(c.Memory.Io.GetTMA())
-
 			c.Memory.Io.SetInterruptFlagBit(ioregs.TIMER, true) // Set IF.2
 		}
 		c.Memory.Io.SetTIMA(uint8(tima))

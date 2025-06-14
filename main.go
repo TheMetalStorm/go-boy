@@ -14,8 +14,7 @@ type Debugger = debugger.Debugger
 var e *Emulator = emulator.NewEmulator()
 
 var tests = []string{
-	//"./testroms/double-halt-cancel.gb",
-	//"./testroms/blargg/instr_timing/instr_timing.gb",
+	"./testroms/blargg/instr_timing/instr_timing.gb",
 	"./testroms/blargg/mem_timing/individual/01-read_timing.gb",
 	"./testroms/blargg/mem_timing/individual/02-write_timing.gb",
 	"./testroms/blargg/mem_timing/individual/03-modify_timing.gb",

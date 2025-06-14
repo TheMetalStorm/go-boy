@@ -3,7 +3,6 @@
 package emulator
 
 import (
-	"fmt"
 	"go-boy/cpu"
 	"go-boy/ioregs"
 	"go-boy/rom"
@@ -61,7 +60,6 @@ func (e *Emulator) RunTests(tests []string) {
 	var startNext bool = false
 	go changeBool(&startNext)
 	for _, test := range tests {
-		fmt.Printf("Running test: %s\n", test)
 		startNext = false
 		e.Restart()
 		e.currentGame = rom.NewRom(test)
