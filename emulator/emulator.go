@@ -88,9 +88,7 @@ func changeBool(startNextTest *bool) {
 
 func (e *Emulator) Run() {
 	for {
-		// if e.Cpu.Stop {
-		// 	continue
-		// }
+
 		e.SerialOut()
 		e.Step()
 	}
@@ -98,7 +96,7 @@ func (e *Emulator) Run() {
 
 func (e *Emulator) Step() {
 
-	ranMCyclesThisStep := uint64(0)
+	ranMCyclesThisStep := uint64(1)
 	ranMCyclesThisStep += e.handleInterrupts()
 
 	if !e.Cpu.Halt {
@@ -117,14 +115,10 @@ func (e *Emulator) handleInterrupts() uint64 {
 	activeInterrupts := requestedInterrupts & enabledInterrupts & 0x1f
 	if activeInterrupts != 0 {
 		e.Cpu.Halt = false
-		//return 4
-
 	}
 
 	if e.Cpu.IME {
-
 		if activeInterrupts != 0 {
-
 			e.Cpu.SP--
 			e.Cpu.Memory.SetValue(e.Cpu.SP, cpu.GetHigher8(e.Cpu.PC))
 			e.Cpu.SP--
@@ -147,13 +141,8 @@ func (e *Emulator) handleInterrupts() uint64 {
 				e.Cpu.PC = 0x0060
 			}
 			e.Cpu.IME = false
-			// if e.Cpu.Halt {
-			// 	e.Cpu.Halt = false
-			// 	return 6
-			// }
 			return 5
 		}
-
 	}
 	return 0
 }
@@ -217,6 +206,7 @@ func (e *Emulator) updateTimaReg(mCyclesThisStep uint64) {
 		tima += uint16(incr)
 		if tima > 0xFF { // Handle overflow
 			tima = uint16(e.Cpu.Memory.Io.GetTMA())
+
 			e.Cpu.Memory.Io.SetInterruptFlagBit(ioregs.TIMER, true) // Set IF.2
 		}
 		e.Cpu.Memory.Io.SetTIMA(uint8(tima))

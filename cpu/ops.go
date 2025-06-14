@@ -25,13 +25,16 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 		activeInterrupts := requestedInterrupts & enabledInterrupts & 0x1f
 
 		cpu.PC++
+
 		if cpu.IME {
 			cpu.Halt = true
 		} else {
 			if activeInterrupts != 0 {
-				cpu.Halt = true
-			} else {
+				//TODO: handle
 				cpu.HaltBug = true
+			} else {
+				cpu.Halt = true
+
 			}
 		}
 
