@@ -1,17 +1,18 @@
 package main
 
 import (
+	g "github.com/AllenDang/giu"
+	_ "github.com/faiface/pixel"
+	"github.com/faiface/pixel/pixelgl"
+
 	"go-boy/debugger"
 	"go-boy/emulator"
 	"os"
-
-	g "github.com/AllenDang/giu"
+	"runtime"
 )
 
 type Emulator = emulator.Emulator
 type Debugger = debugger.Debugger
-
-var e *Emulator = emulator.NewEmulator()
 
 var tests = []string{
 	"./testroms/blargg/instr_timing/instr_timing.gb",
@@ -33,14 +34,14 @@ var tests = []string{
 }
 
 func main() {
-	// f, err := os.OpenFile("gb-log", os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// if err := os.Truncate("./gb-log", 0); err != nil {
-	// 	os.Exit(0)
-	// }
-	// f.Close()
+	//for sdl2
+	runtime.LockOSThread()
+	pixelgl.Run(start)
+}
+
+func start() {
+
+	var e *Emulator = emulator.NewEmulator()
 	isDebugMode := false
 	test := false
 	argsWithoutProg := os.Args[1:]
@@ -63,7 +64,6 @@ func main() {
 
 	}
 	defer logFile.Close()
-	e.Restart()
 
 	dbg := debugger.NewDebugger()
 	dbg.SetEmu(e)

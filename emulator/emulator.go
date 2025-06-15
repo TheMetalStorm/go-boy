@@ -5,6 +5,7 @@ package emulator
 import (
 	"go-boy/cpu"
 	"go-boy/ioregs"
+	"go-boy/ppu"
 	"go-boy/rom"
 	"go-boy/screen"
 	"os"
@@ -15,6 +16,8 @@ type Rom = rom.Rom
 type Screen = screen.Screen
 type Cpu = cpu.Cpu
 
+type Ppu = ppu.Ppu
+
 // http://www.codeslinger.co.uk/pages/projects/gameboy/beginning.html
 var MAX_CYCLES_PER_FRAME uint64 = 69905
 var GB_CLOCK_SPEED_HZ uint64 = 4194304
@@ -22,9 +25,10 @@ var DIV_REG_INCREMENT_HZ = 16384
 
 type Emulator struct {
 	Cpu         *Cpu
-	screen      *Screen
+	Ppu         *Ppu
 	currentGame *Rom
 
+	doRender            bool
 	ranMCyclesThisFrame uint64
 
 	//nextCycleCopyTmaToTima bool
@@ -32,13 +36,16 @@ type Emulator struct {
 
 func NewEmulator() *Emulator {
 	emu := &Emulator{}
+	emu.doRender = true
 	emu.Cpu = cpu.NewCpu()
+	emu.Ppu = ppu.NewPpu()
 	emu.Restart()
 	return emu
 }
 
 func (e *Emulator) Restart() {
 	e.Cpu.Restart()
+	e.Ppu.Restart()
 	e.ranMCyclesThisFrame = 0
 
 	e.currentGame = rom.NewRom("./testroms/blargg/cpu_instrs/individual/02-interrupts.gb")
@@ -102,8 +109,10 @@ func (e *Emulator) Step() {
 	}
 
 	e.Cpu.UpdateTimers(ranMCyclesThisStep)
-
-	//e.refreshScreen()
+	if e.doRender {
+		e.Ppu.Step(e.Cpu)
+		e.doRender = false
+	}
 	e.ranMCyclesThisFrame += ranMCyclesThisStep
 
 }
@@ -145,10 +154,6 @@ func (e *Emulator) handleInterrupts() uint64 {
 	return 0
 }
 
-func (e *Emulator) refreshScreen() {
-	e.screen.Update()
-}
-
 func (e *Emulator) SerialOut() {
 	read, _ := e.Cpu.Memory.ReadByteAt(0xff02)
 	if read == 0x81 {
@@ -161,8 +166,4 @@ func (e *Emulator) SerialOut() {
 
 func (e *Emulator) GetCurrentGame() []byte {
 	return e.currentGame.GetData()
-}
-
-func (e *Emulator) SetScreen(screen *Screen) {
-	e.screen = screen
 }
