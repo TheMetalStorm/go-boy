@@ -147,10 +147,6 @@ func StartLoop(d *Debugger) func() {
 	}
 }
 
-func Loop() {
-
-}
-
 func makeHramTableFromSlice(slice []uint8) []*g.TableRowWidget {
 	rows := make([]*g.TableRowWidget, len(slice))
 	start := 0xff80

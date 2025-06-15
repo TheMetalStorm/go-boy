@@ -182,6 +182,10 @@ func GetBit(num uint8, bit uint8) bool {
 	res := (num >> bit) & 1
 	return res != 0
 }
+func GetBit16(num uint16, bit uint8) bool {
+	res := (num >> bit) & 1
+	return res != 0
+}
 
 func (m *Mmap) SetInterruptEnabledBit(bit ioregs.InterruptFlags, cond bool) {
 	SetBit(&m.Ie, uint8(bit), cond)

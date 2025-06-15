@@ -4,11 +4,9 @@ import (
 	g "github.com/AllenDang/giu"
 	_ "github.com/faiface/pixel"
 	"github.com/faiface/pixel/pixelgl"
-
 	"go-boy/debugger"
 	"go-boy/emulator"
 	"os"
-	"runtime"
 )
 
 type Emulator = emulator.Emulator
@@ -35,7 +33,7 @@ var tests = []string{
 
 func main() {
 	//for sdl2
-	runtime.LockOSThread()
+	//runtime.LockOSThread()
 	pixelgl.Run(start)
 }
 

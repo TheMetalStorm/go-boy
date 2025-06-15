@@ -23,6 +23,8 @@ var MAX_CYCLES_PER_FRAME uint64 = 69905
 var GB_CLOCK_SPEED_HZ uint64 = 4194304
 var DIV_REG_INCREMENT_HZ = 16384
 
+var mult float64 = 5
+
 type Emulator struct {
 	Cpu         *Cpu
 	Ppu         *Ppu
@@ -38,17 +40,17 @@ func NewEmulator() *Emulator {
 	emu := &Emulator{}
 	emu.doRender = true
 	emu.Cpu = cpu.NewCpu()
-	emu.Ppu = ppu.NewPpu()
+	emu.Ppu = ppu.NewPpu(mult)
 	emu.Restart()
 	return emu
 }
 
 func (e *Emulator) Restart() {
 	e.Cpu.Restart()
-	e.Ppu.Restart()
+	e.Ppu.Restart(mult)
 	e.ranMCyclesThisFrame = 0
 
-	e.currentGame = rom.NewRom("./testroms/blargg/cpu_instrs/individual/02-interrupts.gb")
+	e.currentGame = rom.NewRom("./games/tetris.gb")
 
 	//e.currentGame = rom.NewRom("./games/tetris.gb")
 	e.LoadRom(e.currentGame)
@@ -109,10 +111,10 @@ func (e *Emulator) Step() {
 	}
 
 	e.Cpu.UpdateTimers(ranMCyclesThisStep)
-	if e.doRender {
-		e.Ppu.Step(e.Cpu)
-		e.doRender = false
-	}
+	//if e.doRender {
+	e.Ppu.Step(e.Cpu)
+	//e.doRender = false
+	//}
 	e.ranMCyclesThisFrame += ranMCyclesThisStep
 
 }
