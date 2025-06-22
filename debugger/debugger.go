@@ -2,11 +2,11 @@ package debugger
 
 import (
 	"fmt"
+	g "github.com/AllenDang/giu"
+	rl "github.com/gen2brain/raylib-go/raylib"
 	"go-boy/emulator"
 	"image/color"
 	"slices"
-
-	g "github.com/AllenDang/giu"
 )
 
 type Emulator = emulator.Emulator
@@ -303,7 +303,9 @@ func (d *Debugger) SetEmu(emu *Emulator) {
 }
 
 func (d *Debugger) RunEmulator() {
-	for {
+
+	for !rl.WindowShouldClose() {
+		rl.BeginDrawing()
 		d.e.SerialOut()
 
 		// if d.e.Cpu.Stop {
@@ -325,6 +327,8 @@ func (d *Debugger) RunEmulator() {
 				d.doStep = false
 			}
 		}
+		rl.EndDrawing()
+
 	}
 
 }

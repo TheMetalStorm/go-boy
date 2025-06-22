@@ -2,25 +2,26 @@ package ppu
 
 import (
 	"encoding/hex"
-	"fmt"
 	_ "fmt"
-	"github.com/faiface/pixel"
-	"github.com/faiface/pixel/pixelgl"
+	rl "github.com/gen2brain/raylib-go/raylib"
 	"go-boy/cpu"
 	"go-boy/mmap"
 	"image"
 	"image/color"
+	"unsafe"
 )
 
 type Ppu struct {
-	screenMultiplier float64
+	screenMultiplier int
 	running          bool
-	window           *pixelgl.Window // window screen
-	canvas           *pixelgl.Canvas //gb screen
+	screen           rl.Image
+	window           unsafe.Pointer
 }
 
 var TILE_DATA_START int = 0x8000
 var TILE_DATA_END int = 0x97FF
+var GB_WINDOW_WIDTH int = 160
+var GB_WINDOW_HEIGHT int = 144
 
 const (
 	color1 = "75a973"
@@ -33,7 +34,7 @@ type Tile struct {
 	lines [8]uint16
 }
 
-func NewPpu(screenMultiplier float64) *Ppu {
+func NewPpu(screenMultiplier int) *Ppu {
 	ppu := Ppu{}
 	ppu.Restart(screenMultiplier)
 
@@ -41,30 +42,31 @@ func NewPpu(screenMultiplier float64) *Ppu {
 
 }
 
-func (p *Ppu) Restart(screenMultiplier float64) {
-	if p.window == nil {
+func (p *Ppu) Restart(screenMultiplier int) {
 
-		cfg := pixelgl.WindowConfig{
-			Title:     "GoBoy!",
-			Bounds:    pixel.R(0, 0, 160*screenMultiplier, 144*screenMultiplier),
-			Resizable: true,
-		}
-		win, err := pixelgl.NewWindow(cfg)
-		if err != nil {
-			fmt.Printf("Could not create window: %v", err)
-		}
+	if p.window == nil {
+		//setup
 		p.screenMultiplier = screenMultiplier
-		p.window = win
-		p.canvas = pixelgl.NewCanvas(pixel.R(0, 0, 160, 144))
+		rl.InitWindow(int32(GB_WINDOW_WIDTH*p.screenMultiplier), int32(GB_WINDOW_HEIGHT*p.screenMultiplier), "raygui - button")
+		rl.ClearColor(0, 0, 0, 255)
+
+		p.window = rl.GetWindowHandle()
+		//p.screen = rl.NewImage()
+	} else {
+		//only clear
+		rl.ClearColor(0, 0, 0, 255)
+		//p.screen = rl.NewImage()
 
 	}
-
 }
 
 func (p *Ppu) Step(cpu *cpu.Cpu) {
-	p.canvas.Clear(pixel.RGB(0, 0, 0))
-	p.window.Clear(pixel.RGB(0, 0, 0))
 
+	//clear screen and Image
+	rl.ClearColor(0, 0, 0, 255)
+	//p.screen = rl.NewImage()
+
+	//Draw on Imnage
 	for x := range 18 {
 		for y := range 20 {
 			tile := p.readTile(uint16(x*18+y), cpu, true)
@@ -72,12 +74,9 @@ func (p *Ppu) Step(cpu *cpu.Cpu) {
 		}
 	}
 
-	matrix := pixel.IM.
-		Scaled(pixel.ZV, p.screenMultiplier). // Skalierung
-		Moved(p.window.Bounds().Center())
-
-	p.canvas.Draw(p.window, matrix)
-	p.window.Update()
+	// Draw Texture(image) on window, scaled up to right sizeMult
+	texture := rl.LoadTextureFromImage(&p.screen)
+	rl.DrawTextureEx(texture, rl.NewVector2(0, 0), 0, float32(p.screenMultiplier), rl.White)
 }
 
 func (p *Ppu) renderTile(tile Tile, positionX int, positionY int) {
@@ -102,10 +101,11 @@ func (p *Ppu) renderTile(tile Tile, positionX int, positionY int) {
 		}
 	}
 
-	pic := pixel.PictureDataFromImage(img)
-	tileSprite := pixel.NewSprite(pic, pic.Bounds())
-	matrix := pixel.IM.Moved(pixel.V(float64(positionX+4), float64(positionY+4)))
-	tileSprite.Draw(p.canvas, matrix)
+	//draw to p.screen
+	//pic := pixel.PictureDataFromImage(img)
+	//tileSprite := pixel.NewSprite(pic, pic.Bounds())
+	//matrix := pixel.IM.Moved(pixel.V(float64(positionX+4), float64(positionY+4)))
+
 }
 
 func (p *Ppu) readTile(tileDataOffset uint16, cpu *cpu.Cpu, isObject bool) Tile {
@@ -120,7 +120,7 @@ func (p *Ppu) readTile(tileDataOffset uint16, cpu *cpu.Cpu, isObject bool) Tile 
 		if addressingMode { // LCD.4 = 1
 			// same as Object
 			tileStart = 0x8000 + tileDataOffset
-		} else {                      // LCD.4 = 0
+		} else { // LCD.4 = 0
 			if tileDataOffset > 127 { //128-255 start at 0x8800
 				tileStart = 0x8800 + tileDataOffset
 			} else { //0-127 start at 0x9000

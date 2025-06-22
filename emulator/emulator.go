@@ -3,6 +3,7 @@
 package emulator
 
 import (
+	rl "github.com/gen2brain/raylib-go/raylib"
 	"go-boy/cpu"
 	"go-boy/ioregs"
 	"go-boy/ppu"
@@ -23,7 +24,7 @@ var MAX_CYCLES_PER_FRAME uint64 = 69905
 var GB_CLOCK_SPEED_HZ uint64 = 4194304
 var DIV_REG_INCREMENT_HZ = 16384
 
-var mult float64 = 5
+var mult int = 5
 
 type Emulator struct {
 	Cpu         *Cpu
@@ -94,10 +95,12 @@ func changeBool(startNextTest *bool) {
 }
 
 func (e *Emulator) Run() {
-	for {
-
+	//for {
+	for !rl.WindowShouldClose() {
+		rl.BeginDrawing()
 		e.SerialOut()
 		e.Step()
+		rl.EndDrawing()
 	}
 }
 
@@ -109,12 +112,11 @@ func (e *Emulator) Step() {
 	if !e.Cpu.Halt {
 		ranMCyclesThisStep += e.Cpu.Step()
 	}
-
 	e.Cpu.UpdateTimers(ranMCyclesThisStep)
-	//if e.doRender {
-	e.Ppu.Step(e.Cpu)
-	//e.doRender = false
-	//}
+	if e.doRender {
+		e.Ppu.Step(e.Cpu)
+		e.doRender = false
+	}
 	e.ranMCyclesThisFrame += ranMCyclesThisStep
 
 }

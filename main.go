@@ -2,14 +2,13 @@ package main
 
 import (
 	g "github.com/AllenDang/giu"
-	_ "github.com/faiface/pixel"
-	"github.com/faiface/pixel/pixelgl"
 	"go-boy/debugger"
 	"go-boy/emulator"
 	"os"
 )
 
 type Emulator = emulator.Emulator
+
 type Debugger = debugger.Debugger
 
 var tests = []string{
@@ -32,13 +31,6 @@ var tests = []string{
 }
 
 func main() {
-	//for sdl2
-	//runtime.LockOSThread()
-	pixelgl.Run(start)
-}
-
-func start() {
-
 	var e *Emulator = emulator.NewEmulator()
 	isDebugMode := false
 	test := false
@@ -63,10 +55,9 @@ func start() {
 	}
 	defer logFile.Close()
 
-	dbg := debugger.NewDebugger()
-	dbg.SetEmu(e)
-
 	if isDebugMode {
+		dbg := debugger.NewDebugger()
+		dbg.SetEmu(e)
 		go func() {
 			wnd := g.NewMasterWindow("GB Debugger", 800, 800, g.MasterWindowFlagsMaximized)
 			wnd.Run(debugger.StartLoop(dbg))
