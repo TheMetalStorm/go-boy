@@ -53,7 +53,6 @@ func (e *Emulator) Restart() {
 
 	e.currentGame = rom.NewRom("./games/tetris.gb")
 
-	//e.currentGame = rom.NewRom("./games/tetris.gb")
 	e.LoadRom(e.currentGame)
 }
 

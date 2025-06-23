@@ -14,7 +14,7 @@ import (
 type Ppu struct {
 	screenMultiplier int
 	running          bool
-	screen           rl.Image
+	screen           rl.RenderTexture2D
 	window           unsafe.Pointer
 }
 
@@ -47,26 +47,26 @@ func (p *Ppu) Restart(screenMultiplier int) {
 	if p.window == nil {
 		//setup
 		p.screenMultiplier = screenMultiplier
-		rl.InitWindow(int32(GB_WINDOW_WIDTH*p.screenMultiplier), int32(GB_WINDOW_HEIGHT*p.screenMultiplier), "raygui - button")
-		rl.ClearColor(0, 0, 0, 255)
-
+		rl.InitWindow(int32(GB_WINDOW_WIDTH*p.screenMultiplier), int32(GB_WINDOW_HEIGHT*p.screenMultiplier), "go-boy!")
 		p.window = rl.GetWindowHandle()
-		//p.screen = rl.NewImage()
-	} else {
-		//only clear
-		rl.ClearColor(0, 0, 0, 255)
-		//p.screen = rl.NewImage()
 
 	}
+	rl.ClearColor(0, 0, 0, 255)
+	p.screen = rl.LoadRenderTexture(int32(GB_WINDOW_WIDTH), int32(GB_WINDOW_HEIGHT))
+	p.running = true
 }
 
 func (p *Ppu) Step(cpu *cpu.Cpu) {
 
 	//clear screen and Image
 	rl.ClearColor(0, 0, 0, 255)
-	//p.screen = rl.NewImage()
 
-	//Draw on Imnage
+	//clear render texture
+	rl.BeginTextureMode(p.screen)
+	rl.ClearBackground(rl.Blank)
+	rl.EndTextureMode()
+
+	//Draw on RenderTexture
 	for x := range 18 {
 		for y := range 20 {
 			tile := p.readTile(uint16(x*18+y), cpu, true)
@@ -74,13 +74,13 @@ func (p *Ppu) Step(cpu *cpu.Cpu) {
 		}
 	}
 
-	// Draw Texture(image) on window, scaled up to right sizeMult
-	texture := rl.LoadTextureFromImage(&p.screen)
-	rl.DrawTextureEx(texture, rl.NewVector2(0, 0), 0, float32(p.screenMultiplier), rl.White)
+	// Draw RenderTexture on window, scaled up to right sizeMult
+	rl.DrawTextureEx(p.screen.Texture, rl.NewVector2(0, 0), 0, float32(p.screenMultiplier), rl.White)
 }
 
 func (p *Ppu) renderTile(tile Tile, positionX int, positionY int) {
 
+	//img := rl.GenImageColor(8, 8, rl.White)
 	img := image.NewRGBA(image.Rect(0, 0, 8, 8))
 
 	//Assign
@@ -100,11 +100,20 @@ func (p *Ppu) renderTile(tile Tile, positionX int, positionY int) {
 			img.Set(x, y, c)
 		}
 	}
+	rlImg := rl.Image{
+		Data:    unsafe.Pointer(&img.Pix[0]),
+		Width:   8,
+		Height:  8,
+		Mipmaps: 1,
+		Format:  rl.UncompressedR8g8b8a8,
+	}
 
-	//draw to p.screen
-	//pic := pixel.PictureDataFromImage(img)
-	//tileSprite := pixel.NewSprite(pic, pic.Bounds())
-	//matrix := pixel.IM.Moved(pixel.V(float64(positionX+4), float64(positionY+4)))
+	tex := rl.LoadTextureFromImage(&rlImg)
+
+	//draw tex onto render Texture
+	rl.BeginTextureMode(p.screen)
+	rl.DrawTexture(tex, int32(positionX), int32(positionY), rl.White)
+	rl.EndTextureMode()
 
 }
 
