@@ -51,7 +51,7 @@ func (e *Emulator) Restart() {
 	e.Ppu.Restart(mult)
 	e.ranMCyclesThisFrame = 0
 
-	e.currentGame = rom.NewRom("./games/tetris.gb")
+	e.currentGame = rom.NewRom("./games/Tetris.gb")
 
 	e.LoadRom(e.currentGame)
 }
