@@ -46,22 +46,23 @@ func (p *Ppu) Restart(screenMultiplier int) {
 
 func (p *Ppu) Step(cpu *cpu.Cpu) {
 
+	//TODO
 	//clear screen and Image
-	rl.ClearColor(0, 0, 0, 255)
+	// rl.ClearColor(0, 0, 0, 255)
 
-	//clear render texture
-	rl.BeginTextureMode(p.screen)
-	rl.ClearBackground(rl.Blank)
-	rl.EndTextureMode()
+	// //clear render texture
+	// rl.BeginTextureMode(p.screen)
+	// rl.ClearBackground(rl.Blank)
+	// rl.EndTextureMode()
 
-	//Draw on RenderTexture
-	for x := range 18 {
-		for y := range 20 {
-			tile := draw.ReadTile(uint16(x*18+y), cpu, true)
-			draw.RenderTileToScreen(tile, x*8, y*8, p.screen)
-		}
-	}
+	// //Draw on RenderTexture
+	// for x := range 18 {
+	// 	for y := range 20 {
+	// 		// tile := draw.ReadTile(uint16(x*18+y), cpu, true)
+	// 		// draw.RenderTileToScreen(tile, x*8, y*8, p.screen)
+	// 	}
+	// }
 
 	// Draw RenderTexture on window, scaled up to right sizeMult
-	rl.DrawTextureEx(p.screen.Texture, rl.NewVector2(0, 0), 0, float32(p.screenMultiplier), rl.White)
+	// rl.DrawTextureEx(p.screen.Texture, rl.NewVector2(0, 0), 0, float32(p.screenMultiplier), rl.White)
 }

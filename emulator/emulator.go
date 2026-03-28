@@ -112,7 +112,7 @@ func (e *Emulator) Step() {
 	}
 	e.Cpu.UpdateTimers(ranMCyclesThisStep)
 	// if e.doRender {
-	e.Ppu.Step(e.Cpu)
+	// e.Ppu.Step(e.Cpu)
 	// e.doRender = false
 	// }
 

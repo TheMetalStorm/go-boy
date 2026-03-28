@@ -4,8 +4,10 @@ import (
 	"go-boy/debugger"
 	"go-boy/emulator"
 	"os"
+	"runtime/pprof"
 
 	g "github.com/AllenDang/giu"
+	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 type Emulator = emulator.Emulator
@@ -32,6 +34,14 @@ var tests = []string{
 }
 
 func main() {
+
+	rl.SetTargetFPS(60)
+	rl.SetConfigFlags(rl.FlagVsyncHint)
+	f, _ := os.Create("cpu.prof")
+
+	pprof.StartCPUProfile(f)
+	defer pprof.StopCPUProfile()
+
 	var e *Emulator = emulator.NewEmulator()
 	isDebugMode := false
 	test := false

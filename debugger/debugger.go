@@ -43,6 +43,7 @@ func (d *Debugger) reset() {
 	d.doStep = false
 	d.lastBPHit = -1
 	d.breakpoints = nil
+
 }
 
 func (d *Debugger) GetBreakpoints() []uint16 {
@@ -87,6 +88,8 @@ func StartLoop(d *Debugger) func() {
 		slices.Reverse(hramRows)
 
 		regColumns := d.makeRegColumns()
+
+	
 
 		g.SingleWindow().Layout(
 			g.Row(
@@ -142,14 +145,14 @@ func StartLoop(d *Debugger) func() {
 
 					g.TabItem("Hram").Layout(
 						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.GetHram(), 0xff80)...),
-					),
+					),	
 
 					g.TabItem("Ie").Layout(
 						g.Labelf("0xFFFF: %02x", d.e.Cpu.Memory.Ie),
 					),
 
 					g.TabItem("Game Code").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.GetCurrentGame(), 0)...),
+						 g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.GetCurrentGame(), 0)...),
 					),
 				),
 			),
@@ -318,7 +321,9 @@ func (d *Debugger) RunEmulator() {
 
 	for !rl.WindowShouldClose() {
 		rl.BeginDrawing()
+
 		d.RenderTileViewer()
+
 		d.e.SerialOut()
 
 		if d.autorun {
@@ -345,7 +350,7 @@ func (d *Debugger) RunEmulator() {
 
 func (d *Debugger) SetupTileViewer() TileViewerData {
 	tileViewerData := TileViewerData{}
-	tileViewerData.screen = rl.LoadRenderTexture(256, 256)
+	tileViewerData.screen = rl.LoadRenderTexture(128, 128)
 	tileViewerData.window = draw.CreateWindow(800, 800, "Tile Viewer")
 	rl.BeginTextureMode(tileViewerData.screen)
 	rl.ClearBackground(rl.Black)
@@ -356,16 +361,16 @@ func (d *Debugger) SetupTileViewer() TileViewerData {
 func (d *Debugger) RenderTileViewer() {
 	rl.BeginTextureMode(d.tileViewerData.screen)
 	rl.ClearBackground(rl.Blank)
-	rl.EndTextureMode()
 
-	//Draw on RenderTexture Tiles 0 - 127
-	for x := range 255 {
-		tile := draw.ReadTile(uint16(x), d.e.Cpu, true)
-		draw.RenderTileToScreen(tile, x*8, int(x/12)*8, d.tileViewerData.screen)
-
+	objects := make([]draw.Tile, 256)
+	//Draw on RenderTexture Tiles 0 - 255
+	for x := range 256 {
+		objects[x] = draw.ReadTile(uint16(x), d.e.Cpu, true)
 	}
+
+	draw.RenderObjectsToScreen(objects, d.tileViewerData.screen)
 
 	// Draw RenderTexture on window, scaled up to right sizeMult
 	rl.DrawTextureEx(d.tileViewerData.screen.Texture, rl.NewVector2(0, 0), 0, float32(5), rl.White)
-
+	rl.EndTextureMode()
 }
