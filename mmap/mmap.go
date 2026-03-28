@@ -15,13 +15,14 @@ type Mmap struct {
 	wram1 [0x1000]uint8 // 4 KiB Work RAM (WRAM)
 	wram2 [0x1000]uint8 // 4 KiB Work RAM (WRAM)
 
-	echoram [0x1e00]uint8 // Echo Ram (mirror of C000–DDFF)
+	Echoram [0x1e00]uint8 // Echo Ram (mirror of C000–DDFF)
 
 	Oam  [0xa0]uint8 //Object attribute memory (OAM)
 	nu   [0x60]uint8 //not usable
 	Io   Ioregs      // I/O Reg
 	Hram [0x7f]uint8 //high ram
 	Ie   uint8       //interrupt enable reg
+
 }
 
 func (m *Mmap) SetValue(address uint16, value uint8) {
@@ -46,7 +47,7 @@ func (m *Mmap) SetValue(address uint16, value uint8) {
 		m.wram2[address-0xD000] = value
 
 	case address < 0xFE00:
-		m.echoram[address-0xE000] = value
+		m.Echoram[address-0xE000] = value
 
 	case address < 0xFEA0:
 		m.Oam[address-0xFE00] = value
@@ -100,8 +101,8 @@ func (m *Mmap) Read16At(address uint16) (data uint16, numReadBytes uint16) {
 		return uint16(a1 | a2<<8), 2
 
 	case address < 0xFE00-1:
-		a1 := uint16(m.echoram[address-0xe000])
-		a2 := uint16(m.echoram[address-0xe000+1])
+		a1 := uint16(m.Echoram[address-0xe000])
+		a2 := uint16(m.Echoram[address-0xe000+1])
 		return uint16(a1 | a2<<8), 2
 
 	case address < 0xFEA0-1:
@@ -150,7 +151,7 @@ func (m *Mmap) ReadByteAt(address uint16) (val uint8, bytesRead uint16) {
 		return m.wram2[address-0xD000], 1
 
 	case address < 0xFE00:
-		return m.echoram[address-0xE000], 1
+		return m.Echoram[address-0xE000], 1
 
 	case address < 0xFEA0:
 		return m.Oam[address-0xFE00], 1
@@ -227,7 +228,7 @@ func (m *Mmap) GetWram2() []uint8 {
 }
 
 func (m *Mmap) GetEchoram() []uint8 {
-	return m.echoram[:]
+	return m.Echoram[:]
 }
 
 func (m *Mmap) GetOam() []uint8 {
