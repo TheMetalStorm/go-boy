@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go-boy/emulator"
 	"slices"
+	"time"
 
 	"github.com/AllenDang/cimgui-go/imgui"
 )
@@ -54,25 +55,41 @@ func (d *Debugger) SetEmu(emu *Emulator) {
 	d.e = emu
 }
 
-// Render should be called in the cimgui-go main loop (every frame)
-func (d *Debugger) Render() {
-	// Emulator steps
-	d.e.SerialOut()
-	if d.autorun {
-		if slices.Contains(d.GetBreakpoints(), d.e.Cpu.PC) && d.e.Cpu.PC != uint16(d.lastBPHit) {
-			d.autorun = false
-			d.lastBPHit = int(d.e.Cpu.PC)
+var lastFrameTime time.Time
+
+// RunEmulator spins freely to execute CPU instructions at normal speed
+func (d *Debugger) RunEmulator() {
+	for {
+		d.e.SerialOut()
+		if d.autorun {
+			if slices.Contains(d.GetBreakpoints(), d.e.Cpu.PC) && d.e.Cpu.PC != uint16(d.lastBPHit) {
+				d.autorun = false
+				d.lastBPHit = int(d.e.Cpu.PC)
+			} else {
+				d.lastBPHit = -1
+				d.e.Step()
+			}
 		} else {
-			d.lastBPHit = -1
-			d.e.Step()
-		}
-	} else {
-		if d.doStep {
-			d.lastBPHit = -1
-			d.e.Step()
-			d.doStep = false
+			if d.doStep {
+				d.lastBPHit = -1
+				d.e.Step()
+				d.doStep = false
+			} else {
+				// Prevent maxing a core just waiting for an un-paused state
+				time.Sleep(time.Millisecond * 5)
+			}
 		}
 	}
+}
+
+// Render should be called in the cimgui-go main loop (every frame)
+func (d *Debugger) Render() {
+	// Limit framerate to ~60FPS to prevent the unlocked SDL backend from spinning at >1000fps and eating the CPU.
+	elapsed := time.Since(lastFrameTime)
+	if elapsed < time.Millisecond*16 {
+		time.Sleep(time.Millisecond*16 - elapsed)
+	}
+	lastFrameTime = time.Now()
 
 	// Main UI
 	viewport := imgui.MainViewport()
@@ -127,12 +144,19 @@ func (d *Debugger) Render() {
 	if imgui.BeginTable("Hram Stack", 2) {
 		hram := d.e.Cpu.Memory.Hram[:]
 		start := 0xff80
-		for i := len(hram) - 1; i >= 0; i-- {
-			imgui.TableNextRow()
-			imgui.TableNextColumn()
-			imgui.Text(fmt.Sprintf("0x%04x:", start+i))
-			imgui.TableNextColumn()
-			imgui.Text(fmt.Sprintf("0x%02x", hram[i]))
+		rowCount := int32(len(hram))
+		clipper := imgui.NewListClipper()
+		defer clipper.Destroy()
+		clipper.Begin(rowCount)
+		for clipper.Step() {
+			for r := clipper.DisplayStart(); r < clipper.DisplayEnd(); r++ {
+				i := len(hram) - 1 - int(r)
+				imgui.TableNextRow()
+				imgui.TableNextColumn()
+				imgui.Text(fmt.Sprintf("0x%04x:", start+i))
+				imgui.TableNextColumn()
+				imgui.Text(fmt.Sprintf("0x%02x", hram[i]))
+			}
 		}
 		imgui.EndTable()
 	}
@@ -196,38 +220,46 @@ func (d *Debugger) Render() {
 
 func (d *Debugger) RenderMemoryTable(id string, slice []uint8, offset uint32, debuggable bool) {
 	if imgui.BeginTable(id, 17) {
-		for i := 0; i < len(slice); i += 16 {
-			imgui.TableNextRow()
-			imgui.TableNextColumn()
-			imgui.Text(fmt.Sprintf("0x%04x:", int(offset)+i))
+		rowCount := int32((len(slice) + 15) / 16)
+		clipper := imgui.NewListClipper()
+		defer clipper.Destroy()
 
-			for j := 0; j < 16; j++ {
+		clipper.Begin(rowCount)
+		for clipper.Step() {
+			for r := clipper.DisplayStart(); r < clipper.DisplayEnd(); r++ {
+				i := int(r) * 16
+				imgui.TableNextRow()
 				imgui.TableNextColumn()
-				localAddr := uint16(i + j)
-				if int(localAddr) < len(slice) {
-					globalAddr := uint16(offset) + localAddr
-					if debuggable {
-						pushed := 0
-						if d.isCurrentPC(globalAddr) {
-							imgui.PushStyleColorVec4(imgui.ColText, imgui.NewVec4(0, 1, 0, 1))
-							pushed++
-						} else if d.isInDebug(globalAddr) {
-							imgui.PushStyleColorVec4(imgui.ColText, imgui.NewVec4(0, 0.7, 0.7, 1))
-							pushed++
-						}
+				imgui.Text(fmt.Sprintf("0x%04x:", int(offset)+i))
 
-						// Disable button framing to look like giu's styling
-						if imgui.SelectableBool(fmt.Sprintf("%02x##%04x", slice[localAddr], globalAddr)) {
-							d.ToggleBP(globalAddr)
-						}
+				for j := 0; j < 16; j++ {
+					imgui.TableNextColumn()
+					localAddr := uint16(i + j)
+					if int(localAddr) < len(slice) {
+						globalAddr := uint16(offset) + localAddr
+						if debuggable {
+							pushed := 0
+							if d.isCurrentPC(globalAddr) {
+								imgui.PushStyleColorVec4(imgui.ColText, imgui.NewVec4(0, 1, 0, 1))
+								pushed++
+							} else if d.isInDebug(globalAddr) {
+								imgui.PushStyleColorVec4(imgui.ColText, imgui.NewVec4(0, 0.7, 0.7, 1))
+								pushed++
+							}
 
-						for pushed > 0 {
-							imgui.PopStyleColor()
-							pushed--
-						}
-					} else {
-						if imgui.SelectableBool(fmt.Sprintf("%02x##%04x", slice[localAddr], globalAddr)) {
-							// Just visual
+							// Disable button framing to look like giu's styling
+							if imgui.SelectableBool(fmt.Sprintf("%02x##%04x", slice[localAddr], globalAddr)) {
+								d.ToggleBP(globalAddr)
+							}
+
+							for pushed > 0 {
+								imgui.PopStyleColor()
+								pushed--
+							}
+						} else {
+							if imgui.SelectableBool(fmt.Sprintf("%02x##%04x", slice[localAddr], globalAddr)) {
+								// Just visual
+							}
 						}
 					}
 				}

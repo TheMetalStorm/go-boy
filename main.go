@@ -5,6 +5,7 @@ import (
 	"go-boy/emulator"
 	"os"
 	"runtime/pprof"
+	"runtime"
 
 	"github.com/AllenDang/cimgui-go/backend"
 	"github.com/AllenDang/cimgui-go/backend/sdlbackend"
@@ -35,6 +36,7 @@ var tests = []string{
 }
 
 func main() {
+	runtime.LockOSThread()
 	f, _ := os.Create("cpu.prof")
 
 	pprof.StartCPUProfile(f)
@@ -73,6 +75,8 @@ func main() {
 		b, _ := backend.CreateBackend(sdlbackend.NewSDLBackend())
 		b.SetBgColor(imgui.NewVec4(0.1, 0.1, 0.1, 1.0))
 		b.CreateWindow("GB Debugger", 1200, 900)
+		
+		go dbg.RunEmulator()
 		
 		b.Run(func() {
 			dbg.Render()

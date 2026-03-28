@@ -9,7 +9,6 @@ import (
 	"go-boy/rom"
 	"os"
 	"time"
-	"fmt"
 )
 
 type Rom = rom.Rom
@@ -107,7 +106,7 @@ func (e *Emulator) Step() {
 		ranMCyclesThisStep += e.Cpu.Step()
 	}
 	e.Cpu.UpdateTimers(ranMCyclesThisStep)
-	print(fmt.Sprintf("%04x\n", e.Cpu.PC))
+	//fmt.Sprintf("%04x\n", e.Cpu.PC)
 	// if e.doRender {
 	// e.Ppu.Step(e.Cpu)
 	// e.doRender = false
