@@ -2,14 +2,10 @@ package debugger
 
 import (
 	"fmt"
-	draw "go-boy/draw"
 	"go-boy/emulator"
-	"image/color"
 	"slices"
-	"unsafe"
 
-	g "github.com/AllenDang/giu"
-	rl "github.com/gen2brain/raylib-go/raylib"
+	"github.com/AllenDang/cimgui-go/imgui"
 )
 
 type Emulator = emulator.Emulator
@@ -20,17 +16,8 @@ type Debugger struct {
 	breakpoints []uint16
 	lastBPHit   int
 
-	tileViewerData TileViewerData
-
 	e *Emulator
 }
-
-type TileViewerData struct {
-	screen rl.RenderTexture2D
-	window unsafe.Pointer
-}
-
-var splitPos float32 = 200
 
 func NewDebugger() *Debugger {
 	dbg := &Debugger{}
@@ -43,7 +30,6 @@ func (d *Debugger) reset() {
 	d.doStep = false
 	d.lastBPHit = -1
 	d.breakpoints = nil
-
 }
 
 func (d *Debugger) GetBreakpoints() []uint16 {
@@ -51,7 +37,6 @@ func (d *Debugger) GetBreakpoints() []uint16 {
 }
 
 func (d *Debugger) ToggleBP(addr uint16) {
-	//No point in setting BP on Mem Adress 0 since we start here with Autorun == false
 	if addr == 0 {
 		return
 	}
@@ -64,211 +49,192 @@ func (d *Debugger) ToggleBP(addr uint16) {
 	d.breakpoints = append(d.breakpoints, addr)
 }
 
-func (d *Debugger) onStartButton() {
-	d.autorun = true
+func (d *Debugger) SetEmu(emu *Emulator) {
+	d.reset()
+	d.e = emu
 }
 
-func (d *Debugger) onStopButton() {
-	d.autorun = false
+// Render should be called in the cimgui-go main loop (every frame)
+func (d *Debugger) Render() {
+	// Emulator steps
+	d.e.SerialOut()
+	if d.autorun {
+		if slices.Contains(d.GetBreakpoints(), d.e.Cpu.PC) && d.e.Cpu.PC != uint16(d.lastBPHit) {
+			d.autorun = false
+			d.lastBPHit = int(d.e.Cpu.PC)
+		} else {
+			d.lastBPHit = -1
+			d.e.Step()
+		}
+	} else {
+		if d.doStep {
+			d.lastBPHit = -1
+			d.e.Step()
+			d.doStep = false
+		}
+	}
+
+	// Main UI
+	viewport := imgui.MainViewport()
+	imgui.SetNextWindowPosV(viewport.Pos(), imgui.CondFirstUseEver, imgui.NewVec2(0, 0))
+	imgui.SetNextWindowSizeV(viewport.Size(), imgui.CondFirstUseEver)
+
+	imgui.Begin("GB Debugger")
+
+	// Control Row
+	imgui.Text("Control: ")
+	imgui.SameLine()
+	if imgui.Button("Start") {
+		d.autorun = true
+	}
+	imgui.SameLine()
+	if imgui.Button("Stop") {
+		d.autorun = false
+	}
+	imgui.SameLine()
+	if imgui.Button("Step") {
+		d.doStep = true
+	}
+	imgui.SameLine()
+	if imgui.Button("Restart Machine") {
+		d.autorun = false
+		d.e.Restart()
+	}
+
+	// Registers Table
+	imgui.Text("Regs: ")
+	if imgui.BeginTable("Regs", 13) {
+		imgui.TableSetupColumn(fmt.Sprintf("PC: 0x%04x", d.e.Cpu.PC))
+		imgui.TableSetupColumn(fmt.Sprintf("SP: 0x%04x", d.e.Cpu.SP))
+		imgui.TableSetupColumn(fmt.Sprintf("A: 0x%02x", d.e.Cpu.A))
+		imgui.TableSetupColumn(fmt.Sprintf("F: 0x%02x", d.e.Cpu.F))
+		imgui.TableSetupColumn(fmt.Sprintf("B: 0x%02x", d.e.Cpu.B))
+		imgui.TableSetupColumn(fmt.Sprintf("C: 0x%02x", d.e.Cpu.C))
+		imgui.TableSetupColumn(fmt.Sprintf("D: 0x%02x", d.e.Cpu.D))
+		imgui.TableSetupColumn(fmt.Sprintf("E: 0x%02x", d.e.Cpu.E))
+		imgui.TableSetupColumn(fmt.Sprintf("H: 0x%02x", d.e.Cpu.H))
+		imgui.TableSetupColumn(fmt.Sprintf("L: 0x%02x", d.e.Cpu.L))
+		imgui.TableSetupColumn(fmt.Sprintf("DIV: 0x%02x", d.e.Cpu.Memory.Io.GetDIV()))
+		imgui.TableSetupColumn(fmt.Sprintf("TIMA: 0x%02x", d.e.Cpu.Memory.Io.GetTIMA()))
+		imgui.TableSetupColumn(fmt.Sprintf("HALT: %t", d.e.Cpu.Halt))
+		imgui.TableHeadersRow()
+		imgui.EndTable()
+	}
+
+	// Side-by-side Layout: Stack and Tabs
+	imgui.BeginChildStrV("StackRegion", imgui.NewVec2(200, 0), 0, 0)
+	imgui.Text("Stack: (HRAM)")
+	if imgui.BeginTable("Hram Stack", 2) {
+		hram := d.e.Cpu.Memory.Hram[:]
+		start := 0xff80
+		for i := len(hram) - 1; i >= 0; i-- {
+			imgui.TableNextRow()
+			imgui.TableNextColumn()
+			imgui.Text(fmt.Sprintf("0x%04x:", start+i))
+			imgui.TableNextColumn()
+			imgui.Text(fmt.Sprintf("0x%02x", hram[i]))
+		}
+		imgui.EndTable()
+	}
+	imgui.EndChild()
+
+	imgui.SameLine()
+
+	imgui.BeginChildStrV("TabsRegion", imgui.NewVec2(0, 0), 0, 0)
+	// Tabs
+	if imgui.BeginTabBar("Memory Regions") {
+		if imgui.BeginTabItem("Bank0") {
+			d.RenderMemoryTable("Bank0", d.e.Cpu.Memory.GetBank0(), 0, true)
+			imgui.EndTabItem()
+		}
+		if imgui.BeginTabItem("BankN") {
+			d.RenderMemoryTable("BankN", d.e.Cpu.Memory.GetBank1(), 0x4000, true)
+			imgui.EndTabItem()
+		}
+		if imgui.BeginTabItem("Vram") {
+			d.RenderMemoryTable("Vram", d.e.Cpu.Memory.GetVram(), 0x8000, false)
+			imgui.EndTabItem()
+		}
+		if imgui.BeginTabItem("Extram") {
+			d.RenderMemoryTable("Extram", d.e.Cpu.Memory.GetExtram(), 0xa000, false)
+			imgui.EndTabItem()
+		}
+		if imgui.BeginTabItem("Wram1") {
+			d.RenderMemoryTable("Wram1", d.e.Cpu.Memory.GetWram1(), 0xc000, true)
+			imgui.EndTabItem()
+		}
+		if imgui.BeginTabItem("Wram2") {
+			d.RenderMemoryTable("Wram2", d.e.Cpu.Memory.GetWram2(), 0xd000, true)
+			imgui.EndTabItem()
+		}
+		if imgui.BeginTabItem("Oam") {
+			d.RenderMemoryTable("Oam", d.e.Cpu.Memory.GetOam(), 0xfe00, false)
+			imgui.EndTabItem()
+		}
+		if imgui.BeginTabItem("Io") {
+			d.RenderMemoryTable("Io", d.e.Cpu.Memory.Io.Regs[:], 0xff00, false)
+			imgui.EndTabItem()
+		}
+		if imgui.BeginTabItem("Hram") {
+			d.RenderMemoryTable("Hram", d.e.Cpu.Memory.GetHram(), 0xff80, false)
+			imgui.EndTabItem()
+		}
+		if imgui.BeginTabItem("Ie") {
+			imgui.Text(fmt.Sprintf("0xFFFF: %02x", d.e.Cpu.Memory.Ie))
+			imgui.EndTabItem()
+		}
+		if imgui.BeginTabItem("Game Code") {
+			d.RenderMemoryTable("Game Code", d.e.GetCurrentGame(), 0, true)
+			imgui.EndTabItem()
+		}
+		imgui.EndTabBar()
+	}
+	imgui.EndChild()
+
+	imgui.End()
 }
 
-func (d *Debugger) onStepButton() {
-	d.doStep = true
-}
+func (d *Debugger) RenderMemoryTable(id string, slice []uint8, offset uint32, debuggable bool) {
+	if imgui.BeginTable(id, 17) {
+		for i := 0; i < len(slice); i += 16 {
+			imgui.TableNextRow()
+			imgui.TableNextColumn()
+			imgui.Text(fmt.Sprintf("0x%04x:", int(offset)+i))
 
-func (d *Debugger) onRestartButton() {
-	d.autorun = false
-	d.e.Restart()
-}
+			for j := 0; j < 16; j++ {
+				imgui.TableNextColumn()
+				localAddr := uint16(i + j)
+				if int(localAddr) < len(slice) {
+					globalAddr := uint16(offset) + localAddr
+					if debuggable {
+						pushed := 0
+						if d.isCurrentPC(globalAddr) {
+							imgui.PushStyleColorVec4(imgui.ColText, imgui.NewVec4(0, 1, 0, 1))
+							pushed++
+						} else if d.isInDebug(globalAddr) {
+							imgui.PushStyleColorVec4(imgui.ColText, imgui.NewVec4(0, 0.7, 0.7, 1))
+							pushed++
+						}
 
-func StartLoop(d *Debugger) func() {
-	return func() {
-		curSizeX, _ := g.SingleWindow().CurrentSize()
-		hramRows := makeHramTableFromSlice(d.e.Cpu.Memory.Hram[:])
-		slices.Reverse(hramRows)
+						// Disable button framing to look like giu's styling
+						if imgui.SelectableBool(fmt.Sprintf("%02x##%04x", slice[localAddr], globalAddr)) {
+							d.ToggleBP(globalAddr)
+						}
 
-		regColumns := d.makeRegColumns()
-
-	
-
-		g.SingleWindow().Layout(
-			g.Row(
-				g.Label("Control: "),
-				g.Button("Start").OnClick(d.onStartButton),
-				g.Button("Stop").OnClick(d.onStopButton),
-				g.Button("Step").OnClick(d.onStepButton),
-				g.Button("Restart Machine").OnClick(d.onRestartButton),
-			),
-			g.Row(
-				g.Label("Regs: "),
-				g.Table().FastMode(true).Columns(regColumns...).Size(curSizeX, 20),
-			),
-			g.SplitLayout(g.DirectionVertical, &splitPos,
-				g.Column(
-					g.Label("Stack: "),
-					g.Table().FastMode(true).Rows(hramRows...),
-				),
-				g.TabBar().TabItems(
-
-					g.TabItem("Bank0").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRowsDebuggable(d.e.Cpu.Memory.GetBank0(), 0)...),
-					),
-
-					g.TabItem("BankN").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRowsDebuggable(d.e.Cpu.Memory.GetBank1(), 0x4000)...),
-					),
-
-					g.TabItem("Vram").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.GetVram(), 0x8000)...),
-					),
-
-					g.TabItem("Extram").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.GetExtram(), 0xa000)...),
-					),
-
-					g.TabItem("Wram1").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRowsDebuggable(d.e.Cpu.Memory.GetWram1(), 0xc000)...),
-					),
-
-					g.TabItem("Wram2").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRowsDebuggable(d.e.Cpu.Memory.GetWram2(), 0xd000)...),
-					),
-
-					g.TabItem("Oam").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.GetOam(), 0xfe00)...),
-					),
-
-					// Todo better view for Io with description
-					g.TabItem("Io").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.Io.Regs[:], 0xff00)...),
-					),
-
-					g.TabItem("Hram").Layout(
-						g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.Cpu.Memory.GetHram(), 0xff80)...),
-					),	
-
-					g.TabItem("Ie").Layout(
-						g.Labelf("0xFFFF: %02x", d.e.Cpu.Memory.Ie),
-					),
-
-					g.TabItem("Game Code").Layout(
-						 g.Table().Flags(g.TableFlagsRowBg).FastMode(true).Rows(d.makeHexTableRows(d.e.GetCurrentGame(), 0)...),
-					),
-				),
-			),
-		)
+						for pushed > 0 {
+							imgui.PopStyleColor()
+							pushed--
+						}
+					} else {
+						if imgui.SelectableBool(fmt.Sprintf("%02x##%04x", slice[localAddr], globalAddr)) {
+							// Just visual
+						}
+					}
+				}
+			}
+		}
+		imgui.EndTable()
 	}
-}
-
-func makeHramTableFromSlice(slice []uint8) []*g.TableRowWidget {
-	rows := make([]*g.TableRowWidget, len(slice))
-	start := 0xff80
-	for i, v := range slice {
-		rows[i] = g.TableRow(g.Labelf("0x%04x:", start), g.Labelf("0x%02x ", v))
-		start++
-	}
-	return rows
-}
-
-func (d *Debugger) makeHexTableRows(slice []uint8, regionOffset uint32) []*g.TableRowWidget {
-	var rowLen int = (len(slice) / 16) + 1
-	rows := make([]*g.TableRowWidget, rowLen)
-	rowInd := 0
-
-	for hexOffset := 0; hexOffset < len(slice); hexOffset += 16 {
-
-		rows[rowInd] = g.TableRow(
-			g.Selectablef("0x%04x: ", int(regionOffset)+hexOffset),
-			d.makeHexRowCell(slice, regionOffset, hexOffset, 0),
-			d.makeHexRowCell(slice, regionOffset, hexOffset, 1),
-			d.makeHexRowCell(slice, regionOffset, hexOffset, 2),
-			d.makeHexRowCell(slice, regionOffset, hexOffset, 3),
-			d.makeHexRowCell(slice, regionOffset, hexOffset, 4),
-			d.makeHexRowCell(slice, regionOffset, hexOffset, 5),
-			d.makeHexRowCell(slice, regionOffset, hexOffset, 6),
-			d.makeHexRowCell(slice, regionOffset, hexOffset, 7),
-			d.makeHexRowCell(slice, regionOffset, hexOffset, 8),
-			d.makeHexRowCell(slice, regionOffset, hexOffset, 9),
-			d.makeHexRowCell(slice, regionOffset, hexOffset, 10),
-			d.makeHexRowCell(slice, regionOffset, hexOffset, 11),
-			d.makeHexRowCell(slice, regionOffset, hexOffset, 12),
-			d.makeHexRowCell(slice, regionOffset, hexOffset, 13),
-			d.makeHexRowCell(slice, regionOffset, hexOffset, 14),
-			d.makeHexRowCell(slice, regionOffset, hexOffset, 15),
-		)
-		rowInd++
-	}
-
-	if rows[len(rows)-1] == nil {
-		rows[len(rows)-1] = g.TableRow()
-	}
-	return rows
-}
-
-func (d *Debugger) makeHexTableRowsDebuggable(slice []uint8, regionOffset uint32) []*g.TableRowWidget {
-	var rowLen int = len(slice) / 16
-	rows := make([]*g.TableRowWidget, rowLen)
-	rowInd := 0
-
-	for hexOffset := 0; hexOffset < len(slice); hexOffset += 16 {
-		rows[rowInd] = g.TableRow(
-			g.Selectablef("0x%04x: ", int(regionOffset)+hexOffset),
-			d.makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 0),
-			d.makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 1),
-			d.makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 2),
-			d.makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 3),
-			d.makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 4),
-			d.makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 5),
-			d.makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 6),
-			d.makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 7),
-			d.makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 8),
-			d.makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 9),
-			d.makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 10),
-			d.makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 11),
-			d.makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 12),
-			d.makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 13),
-			d.makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 14),
-			d.makeHexRowCellDebugabble(slice, regionOffset, hexOffset, 15),
-		)
-		rowInd++
-	}
-	return rows
-}
-
-func (d *Debugger) makeHexRowCell(slice []uint8, regionOffset uint32, hexOffset int, rowOffset int) g.Widget {
-	localAddr := uint16(hexOffset) + uint16(rowOffset)
-
-	if int(localAddr) > len(slice)-1 {
-		return g.Label(" ")
-	}
-	return g.Selectablef("0x%02x ", slice[hexOffset+rowOffset])
-
-}
-
-func (d *Debugger) makeHexRowCellDebugabble(slice []uint8, regionOffset uint32, hexOffset int, rowOffset int) g.Widget {
-	localAddr := uint16(hexOffset) + uint16(rowOffset)
-	if int(localAddr) > len(slice)-1 {
-		return g.Label(" ")
-	}
-	globalAddr := uint16(regionOffset) + uint16(hexOffset) + uint16(rowOffset)
-
-	style := g.Style()
-
-	if d.isInDebug(globalAddr) {
-		style.SetColor(g.StyleColorButton, color.RGBA{0x00, 0xbb, 0xaa, 0xff})
-
-	}
-	if d.isCurrentPC(globalAddr) {
-		style.SetColor(g.StyleColorText, color.RGBA{0x00, 0xff, 0x00, 0xff})
-
-	}
-	style.SetStyle(g.StyleVarFrameBorderSize, 0, 0)
-	style.SetColor(g.StyleColorButtonHovered, color.RGBA{0x00, 0xff, 0x00, 0x00})
-	style.SetColor(g.StyleColorButtonActive, color.RGBA{0x00, 0xff, 0x00, 0x00})
-
-	button := g.Buttonf("0x%02x ", slice[localAddr]).OnClick(d.OnClickMemView(globalAddr))
-	return style.To(button)
-
 }
 
 func (d *Debugger) isCurrentPC(addr uint16) bool {
@@ -277,100 +243,4 @@ func (d *Debugger) isCurrentPC(addr uint16) bool {
 
 func (d *Debugger) isInDebug(addr uint16) bool {
 	return slices.Contains(d.breakpoints, addr)
-}
-
-func (d *Debugger) OnClickMemView(addr uint16) func() {
-	return func() {
-
-		d.ToggleBP(addr)
-
-	}
-}
-
-func (d *Debugger) makeRegColumns() []*g.TableColumnWidget {
-	regColumns := make([]*g.TableColumnWidget, 13)
-	regColumns[0] = g.TableColumn(fmt.Sprintf("PC: 0x%04x", d.e.Cpu.PC))
-	regColumns[1] = g.TableColumn(fmt.Sprintf("SP: 0x%04x", d.e.Cpu.SP))
-	regColumns[2] = g.TableColumn(fmt.Sprintf("A: 0x%02x", d.e.Cpu.A))
-	regColumns[3] = g.TableColumn(fmt.Sprintf("F: 0x%02x", d.e.Cpu.F))
-	regColumns[4] = g.TableColumn(fmt.Sprintf("B: 0x%02x", d.e.Cpu.B))
-	regColumns[5] = g.TableColumn(fmt.Sprintf("C: 0x%02x", d.e.Cpu.C))
-	regColumns[6] = g.TableColumn(fmt.Sprintf("D: 0x%02x", d.e.Cpu.D))
-	regColumns[7] = g.TableColumn(fmt.Sprintf("E: 0x%02x", d.e.Cpu.E))
-	regColumns[8] = g.TableColumn(fmt.Sprintf("H: 0x%02x", d.e.Cpu.H))
-	regColumns[9] = g.TableColumn(fmt.Sprintf("L: 0x%02x", d.e.Cpu.L))
-	div := d.e.Cpu.Memory.Io.GetDIV()
-
-	regColumns[10] = g.TableColumn(fmt.Sprintf("DIV: 0x%02x", div))
-
-	tima := d.e.Cpu.Memory.Io.GetTIMA()
-	regColumns[11] = g.TableColumn(fmt.Sprintf("TIMA: 0x%02x", tima))
-	regColumns[12] = g.TableColumn(fmt.Sprintf("HALT: 0x%t", d.e.Cpu.Halt))
-
-	return regColumns
-}
-
-func (d *Debugger) SetEmu(emu *Emulator) {
-	d.reset()
-	d.e = emu
-}
-
-func (d *Debugger) RunEmulator() {
-
-	d.tileViewerData = d.SetupTileViewer()
-
-	for !rl.WindowShouldClose() {
-		rl.BeginDrawing()
-
-		d.RenderTileViewer()
-
-		d.e.SerialOut()
-
-		if d.autorun {
-			if slices.Contains(d.GetBreakpoints(), d.e.Cpu.PC) && d.e.Cpu.PC != uint16(d.lastBPHit) {
-				d.autorun = false
-				d.lastBPHit = int(d.e.Cpu.PC)
-			} else {
-				d.lastBPHit = -1
-
-				d.e.Step()
-			}
-		} else {
-			if d.doStep {
-				d.lastBPHit = -1
-				d.e.Step()
-				d.doStep = false
-			}
-		}
-		rl.EndDrawing()
-
-	}
-
-}
-
-func (d *Debugger) SetupTileViewer() TileViewerData {
-	tileViewerData := TileViewerData{}
-	tileViewerData.screen = rl.LoadRenderTexture(128, 128)
-	tileViewerData.window = draw.CreateWindow(800, 800, "Tile Viewer")
-	rl.BeginTextureMode(tileViewerData.screen)
-	rl.ClearBackground(rl.Black)
-	rl.EndTextureMode()
-	return tileViewerData
-}
-
-func (d *Debugger) RenderTileViewer() {
-	rl.BeginTextureMode(d.tileViewerData.screen)
-	rl.ClearBackground(rl.Blank)
-
-	objects := make([]draw.Tile, 256)
-	//Draw on RenderTexture Tiles 0 - 255
-	for x := range 256 {
-		objects[x] = draw.ReadTile(uint16(x), d.e.Cpu, true)
-	}
-
-	draw.RenderObjectsToScreen(objects, d.tileViewerData.screen)
-
-	// Draw RenderTexture on window, scaled up to right sizeMult
-	rl.DrawTextureEx(d.tileViewerData.screen.Texture, rl.NewVector2(0, 0), 0, float32(5), rl.White)
-	rl.EndTextureMode()
 }

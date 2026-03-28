@@ -4,9 +4,6 @@ import (
 	"go-boy/cpu"
 	"go-boy/mmap"
 	"image/color"
-	"unsafe"
-
-	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 var color1 = color.RGBA{0x75, 0xa9, 0x73, 0xFF}
@@ -18,12 +15,7 @@ type Tile struct {
 	Lines [8]uint16
 }
 
-var tileTexture rl.Texture2D
 
-func CreateWindow(width, height int, name string) unsafe.Pointer {
-	rl.InitWindow(int32(width), int32(height), name)
-	return rl.GetWindowHandle()
-}
 
 // func RenderTileToScreen(tile Tile, positionX int, positionY int, screen rl.RenderTexture2D) {
 
@@ -60,40 +52,8 @@ func CreateWindow(width, height int, name string) unsafe.Pointer {
 
 // }
 
-func RenderObjectsToScreen(objects []Tile, screen rl.RenderTexture2D) {
-	if tileTexture.ID == 0 {
-		tileTexture = rl.LoadTextureFromImage(rl.GenImageColor(8*8, 32*8, rl.White))
-	}
-	for x := range 8 {
-		for y := range 32 {
-			object := objects[y*8+x]
-			img := make([]color.RGBA, 64)
-
-			//Assign
-			for y := range 8 {
-				currentLine := object.Lines[y]
-				for x := range 8 {
-					colorLsb := 0
-					if mmap.GetBit16(currentLine, uint8(1*x)) {
-						colorLsb = 1
-					}
-					colorMsb := 0
-					if mmap.GetBit16(currentLine, uint8(8+1*x)) {
-						colorMsb = 1
-					}
-					colorBits := colorLsb & (colorMsb << 1)
-					c := getColor(colorBits)
-					img[y*8+x] = c
-				}
-			}
-			rl.UpdateTextureRec(tileTexture, rl.Rectangle{X: float32(x * 8.0), Y: float32(y * 8.0), Width: 8, Height: 8}, img)
-		}
-	}
-
-	// 	//draw tex onto render Texture
-	rl.BeginTextureMode(screen)
-	rl.DrawTexture(tileTexture, 0, 0, rl.White)
-	rl.EndTextureMode()
+func RenderObjectsToScreen(objects []Tile, screen interface{}) {
+	// Stubbed
 }
 
 func ReadTile(tileDataOffset uint16, cpu *cpu.Cpu, isObject bool) Tile {

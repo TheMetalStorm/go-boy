@@ -6,8 +6,9 @@ import (
 	"os"
 	"runtime/pprof"
 
-	g "github.com/AllenDang/giu"
-	rl "github.com/gen2brain/raylib-go/raylib"
+	"github.com/AllenDang/cimgui-go/backend"
+	"github.com/AllenDang/cimgui-go/backend/sdlbackend"
+	"github.com/AllenDang/cimgui-go/imgui"
 )
 
 type Emulator = emulator.Emulator
@@ -34,9 +35,6 @@ var tests = []string{
 }
 
 func main() {
-
-	rl.SetTargetFPS(60)
-	rl.SetConfigFlags(rl.FlagVsyncHint)
 	f, _ := os.Create("cpu.prof")
 
 	pprof.StartCPUProfile(f)
@@ -64,17 +62,21 @@ func main() {
 		}
 
 	}
-	defer logFile.Close()
+	if logFile != nil {
+		defer logFile.Close()
+	}
 
 	if isDebugMode {
 		dbg := debugger.NewDebugger()
 		dbg.SetEmu(e)
-		go func() {
-			wnd := g.NewMasterWindow("GB Debugger", 800, 800, g.MasterWindowFlagsMaximized)
-
-			wnd.Run(debugger.StartLoop(dbg))
-		}()
-		dbg.RunEmulator()
+		
+		b, _ := backend.CreateBackend(sdlbackend.NewSDLBackend())
+		b.SetBgColor(imgui.NewVec4(0.1, 0.1, 0.1, 1.0))
+		b.CreateWindow("GB Debugger", 1200, 900)
+		
+		b.Run(func() {
+			dbg.Render()
+		})
 	} else {
 		if test {
 			e.RunTests(tests)

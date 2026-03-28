@@ -3,18 +3,13 @@ package ppu
 import (
 	_ "fmt"
 	"go-boy/cpu"
-
-	"go-boy/draw"
-
-	rl "github.com/gen2brain/raylib-go/raylib"
-
 	"unsafe"
 )
 
 type Ppu struct {
 	screenMultiplier int
 	running          bool
-	screen           rl.RenderTexture2D
+	screen           interface{}
 	window           unsafe.Pointer
 }
 
@@ -32,15 +27,9 @@ func NewPpu(screenMultiplier int) *Ppu {
 }
 
 func (p *Ppu) Restart(screenMultiplier int) {
-
 	if p.window == nil {
-		//setup
 		p.screenMultiplier = screenMultiplier
-		p.window = draw.CreateWindow(screenMultiplier*GB_WINDOW_WIDTH, screenMultiplier*GB_WINDOW_HEIGHT, "go-boy!")
-
 	}
-	rl.ClearColor(0, 0, 0, 255)
-	p.screen = rl.LoadRenderTexture(int32(GB_WINDOW_WIDTH), int32(GB_WINDOW_HEIGHT))
 	p.running = true
 }
 

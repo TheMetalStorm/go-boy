@@ -9,8 +9,7 @@ import (
 	"go-boy/rom"
 	"os"
 	"time"
-
-	rl "github.com/gen2brain/raylib-go/raylib"
+	"fmt"
 )
 
 type Rom = rom.Rom
@@ -93,12 +92,9 @@ func changeBool(startNextTest *bool) {
 }
 
 func (e *Emulator) Run() {
-	//for {
-	for !rl.WindowShouldClose() {
-		rl.BeginDrawing()
+	for {
 		e.SerialOut()
 		e.Step()
-		rl.EndDrawing()
 	}
 }
 
@@ -111,6 +107,7 @@ func (e *Emulator) Step() {
 		ranMCyclesThisStep += e.Cpu.Step()
 	}
 	e.Cpu.UpdateTimers(ranMCyclesThisStep)
+	print(fmt.Sprintf("%04x\n", e.Cpu.PC))
 	// if e.doRender {
 	// e.Ppu.Step(e.Cpu)
 	// e.doRender = false
