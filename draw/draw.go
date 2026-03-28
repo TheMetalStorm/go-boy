@@ -1,7 +1,6 @@
 package draw
 
 import (
-	"encoding/hex"
 	"go-boy/cpu"
 	"go-boy/mmap"
 	"image/color"
@@ -10,12 +9,10 @@ import (
 	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
-const (
-	color1 = "75a973"
-	color2 = "72a381"
-	color3 = "749989"
-	color4 = "77978a"
-)
+var color1 = color.RGBA{0x75, 0xa9, 0x73, 0xFF}
+var color2 = color.RGBA{0x72, 0xa3, 0x81, 0xFF}
+var color3 = color.RGBA{0x74, 0x99, 0x89, 0xFF}
+var color4 = color.RGBA{0x77, 0x97, 0x8a, 0xFF}
 
 type Tile struct {
 	Lines [8]uint16
@@ -28,40 +25,77 @@ func CreateWindow(width, height int, name string) unsafe.Pointer {
 	return rl.GetWindowHandle()
 }
 
-func RenderTileToScreen(tile Tile, positionX int, positionY int, screen rl.RenderTexture2D) {
+// func RenderTileToScreen(tile Tile, positionX int, positionY int, screen rl.RenderTexture2D) {
 
+// 	if tileTexture.ID == 0 {
+// 		tileTexture = rl.LoadTextureFromImage(rl.GenImageColor(8, 8, rl.White))
+// 	}
+// 	//img := rl.GenImageColor(8, 8, rl.White)
+// 	img := make([]color.RGBA, 64)
+
+// 	//Assign
+// 	for y := range 8 {
+// 		currentLine := tile.Lines[y]
+// 		for x := range 8 {
+// 			colorLsb := 0
+// 			if mmap.GetBit16(currentLine, uint8(1*x)) {
+// 				colorLsb = 1
+// 			}
+// 			colorMsb := 0
+// 			if mmap.GetBit16(currentLine, uint8(8+1*x)) {
+// 				colorMsb = 1
+// 			}
+// 			colorBits := colorLsb & (colorMsb << 1)
+// 			c := getColor(colorBits)
+// 			img[y*8+x] = c
+// 		}
+// 	}
+
+// 	rl.UpdateTexture(tileTexture, img)
+
+// 	//draw tex onto render Texture
+// 	rl.BeginTextureMode(screen)
+// 	rl.DrawTexture(tileTexture, int32(positionX), int32(positionY), rl.White)
+// 	rl.EndTextureMode()
+
+// }
+
+func RenderObjectsToScreen(objects []Tile, screen rl.RenderTexture2D) {
 	if tileTexture.ID == 0 {
-		tileTexture = rl.LoadTextureFromImage(rl.GenImageColor(8, 8, rl.White))
+		tileTexture = rl.LoadTextureFromImage(rl.GenImageColor(8*8, 32*8, rl.White))
 	}
-	//img := rl.GenImageColor(8, 8, rl.White)
-	img := []color.RGBA{}
+	for x := range 8 {
+		for y := range 32 {
+			object := objects[y*8+x]
+			img := make([]color.RGBA, 64)
 
-	//Assign
-	for y := range 8 {
-		currentLine := tile.Lines[y]
-		for x := range 8 {
-			colorLsb := 0
-			if mmap.GetBit16(currentLine, uint8(1*x)) {
-				colorLsb = 1
+			//Assign
+			for y := range 8 {
+				currentLine := object.Lines[y]
+				for x := range 8 {
+					colorLsb := 0
+					if mmap.GetBit16(currentLine, uint8(1*x)) {
+						colorLsb = 1
+					}
+					colorMsb := 0
+					if mmap.GetBit16(currentLine, uint8(8+1*x)) {
+						colorMsb = 1
+					}
+					colorBits := colorLsb & (colorMsb << 1)
+					c := getColor(colorBits)
+					img[y*8+x] = c
+				}
 			}
-			colorMsb := 0
-			if mmap.GetBit16(currentLine, uint8(8+1*x)) {
-				colorMsb = 1
-			}
-			colorBits := colorLsb & (colorMsb << 1)
-			c := getColor(colorBits)
-			img = append(img, c)
+			rl.UpdateTextureRec(tileTexture, rl.Rectangle{X: float32(x * 8.0), Y: float32(y * 8.0), Width: 8, Height: 8}, img)
 		}
 	}
 
-	rl.UpdateTexture(tileTexture, img)
-
-	//draw tex onto render Texture
+	// 	//draw tex onto render Texture
 	rl.BeginTextureMode(screen)
-	rl.DrawTexture(tileTexture, int32(positionX), int32(positionY), rl.White)
+	rl.DrawTexture(tileTexture, 0, 0, rl.White)
 	rl.EndTextureMode()
-
 }
+
 func ReadTile(tileDataOffset uint16, cpu *cpu.Cpu, isObject bool) Tile {
 
 	var tileStart uint16
@@ -93,17 +127,13 @@ func getColor(bits int) color.RGBA {
 	//TODO: Get According to Palette
 	switch bits {
 	case 0:
-		b, _ := hex.DecodeString(color1)
-		return color.RGBA{b[0], b[1], b[2], 0xFF}
+		return color1
 	case 1:
-		b, _ := hex.DecodeString(color2)
-		return color.RGBA{b[0], b[1], b[2], 0xFF}
+		return color2
 	case 2:
-		b, _ := hex.DecodeString(color3)
-		return color.RGBA{b[0], b[1], b[2], 0xFF}
+		return color3
 	case 3:
-		b, _ := hex.DecodeString(color4)
-		return color.RGBA{b[0], b[1], b[2], 0xFF}
+		return color4
 	default:
 		return color.RGBA{0, 0, 0, 0xFF}
 	}
