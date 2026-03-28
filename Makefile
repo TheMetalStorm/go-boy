@@ -1,6 +1,6 @@
 # Run in regular mode
 run:
-	go run -tags rgfw  .
+	go run -tags rgfw .
 
 # Start with visual debugger
 dbg:
