@@ -3,18 +3,17 @@
 package emulator
 
 import (
-	rl "github.com/gen2brain/raylib-go/raylib"
 	"go-boy/cpu"
 	"go-boy/ioregs"
 	"go-boy/ppu"
 	"go-boy/rom"
-	"go-boy/screen"
 	"os"
 	"time"
+
+	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 type Rom = rom.Rom
-type Screen = screen.Screen
 type Cpu = cpu.Cpu
 
 type Ppu = ppu.Ppu
@@ -112,13 +111,15 @@ func (e *Emulator) Step() {
 		ranMCyclesThisStep += e.Cpu.Step()
 	}
 	e.Cpu.UpdateTimers(ranMCyclesThisStep)
-	if e.doRender {
-		e.Ppu.Step(e.Cpu)
-		e.doRender = false
-	}
+	// if e.doRender {
+	e.Ppu.Step(e.Cpu)
+	// e.doRender = false
+	// }
+
 	e.ranMCyclesThisFrame += ranMCyclesThisStep
 
 }
+
 func (e *Emulator) handleInterrupts() uint64 {
 	requestedInterrupts := e.Cpu.Memory.Io.GetIF()
 	enabledInterrupts := e.Cpu.Memory.GetIe()

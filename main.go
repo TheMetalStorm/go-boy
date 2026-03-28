@@ -1,10 +1,11 @@
 package main
 
 import (
-	g "github.com/AllenDang/giu"
 	"go-boy/debugger"
 	"go-boy/emulator"
 	"os"
+
+	g "github.com/AllenDang/giu"
 )
 
 type Emulator = emulator.Emulator
@@ -60,6 +61,7 @@ func main() {
 		dbg.SetEmu(e)
 		go func() {
 			wnd := g.NewMasterWindow("GB Debugger", 800, 800, g.MasterWindowFlagsMaximized)
+
 			wnd.Run(debugger.StartLoop(dbg))
 		}()
 		dbg.RunEmulator()

@@ -2,11 +2,14 @@ package debugger
 
 import (
 	"fmt"
-	g "github.com/AllenDang/giu"
-	rl "github.com/gen2brain/raylib-go/raylib"
+	draw "go-boy/draw"
 	"go-boy/emulator"
 	"image/color"
 	"slices"
+	"unsafe"
+
+	g "github.com/AllenDang/giu"
+	rl "github.com/gen2brain/raylib-go/raylib"
 )
 
 type Emulator = emulator.Emulator
@@ -17,7 +20,14 @@ type Debugger struct {
 	breakpoints []uint16
 	lastBPHit   int
 
+	tileViewerData TileViewerData
+
 	e *Emulator
+}
+
+type TileViewerData struct {
+	screen rl.RenderTexture2D
+	window unsafe.Pointer
 }
 
 var splitPos float32 = 200
@@ -304,13 +314,13 @@ func (d *Debugger) SetEmu(emu *Emulator) {
 
 func (d *Debugger) RunEmulator() {
 
+	d.tileViewerData = d.SetupTileViewer()
+
 	for !rl.WindowShouldClose() {
 		rl.BeginDrawing()
+		d.RenderTileViewer()
 		d.e.SerialOut()
 
-		// if d.e.Cpu.Stop {
-		// 	continue
-		// }
 		if d.autorun {
 			if slices.Contains(d.GetBreakpoints(), d.e.Cpu.PC) && d.e.Cpu.PC != uint16(d.lastBPHit) {
 				d.autorun = false
@@ -330,5 +340,32 @@ func (d *Debugger) RunEmulator() {
 		rl.EndDrawing()
 
 	}
+
+}
+
+func (d *Debugger) SetupTileViewer() TileViewerData {
+	tileViewerData := TileViewerData{}
+	tileViewerData.screen = rl.LoadRenderTexture(256, 256)
+	tileViewerData.window = draw.CreateWindow(800, 800, "Tile Viewer")
+	rl.BeginTextureMode(tileViewerData.screen)
+	rl.ClearBackground(rl.Black)
+	rl.EndTextureMode()
+	return tileViewerData
+}
+
+func (d *Debugger) RenderTileViewer() {
+	rl.BeginTextureMode(d.tileViewerData.screen)
+	rl.ClearBackground(rl.Blank)
+	rl.EndTextureMode()
+
+	//Draw on RenderTexture Tiles 0 - 127
+	for x := range 255 {
+		tile := draw.ReadTile(uint16(x), d.e.Cpu, true)
+		draw.RenderTileToScreen(tile, x*8, int(x/12)*8, d.tileViewerData.screen)
+
+	}
+
+	// Draw RenderTexture on window, scaled up to right sizeMult
+	rl.DrawTextureEx(d.tileViewerData.screen.Texture, rl.NewVector2(0, 0), 0, float32(5), rl.White)
 
 }
