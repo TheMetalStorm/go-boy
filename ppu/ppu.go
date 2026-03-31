@@ -3,14 +3,16 @@ package ppu
 import (
 	_ "fmt"
 	"go-boy/cpu"
-	"unsafe"
+	"time"
+
+	"github.com/veandco/go-sdl2/sdl"
 )
 
 type Ppu struct {
 	screenMultiplier int
 	running          bool
-	screen           interface{}
-	window           unsafe.Pointer
+	Surface          *sdl.Surface
+	Window           *sdl.Window
 }
 
 var TILE_DATA_START int = 0x8000
@@ -20,6 +22,18 @@ var GB_WINDOW_HEIGHT int = 144
 
 func NewPpu(screenMultiplier int) *Ppu {
 	ppu := Ppu{}
+	window, err := sdl.CreateWindow("go-boy!", sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED, 800, 600, sdl.WINDOW_SHOWN)
+	if err != nil {
+		panic(err)
+	}
+	ppu.Window = window
+
+	surface, err := window.GetSurface()
+	if err != nil {
+		panic(err)
+	}
+
+	ppu.Surface = surface
 	ppu.Restart(screenMultiplier)
 
 	return &ppu
@@ -27,14 +41,29 @@ func NewPpu(screenMultiplier int) *Ppu {
 }
 
 func (p *Ppu) Restart(screenMultiplier int) {
-	if p.window == nil {
+	if p.Window == nil {
 		p.screenMultiplier = screenMultiplier
 	}
 	p.running = true
 }
 
+func (p *Ppu) Render(cpu *cpu.Cpu) {
+	for p.running {
+		p.Step(cpu)
+	}
+}
+
 func (p *Ppu) Step(cpu *cpu.Cpu) {
 
+	p.Surface.FillRect(nil, 0)
+	rect := sdl.Rect{0, 0, int32(time.Now().Second()), 200}
+	colour := sdl.Color{R: 255, G: 0, B: 255, A: 255} // purple
+	pixel := sdl.MapRGBA(p.Surface.Format, colour.R, colour.G, colour.B, colour.A)
+	p.Surface.FillRect(&rect, pixel)
+	p.Window.UpdateSurface()
+	// for p.running {
+
+	// }
 	//TODO
 	//clear screen and Image
 	// rl.ClearColor(0, 0, 0, 255)

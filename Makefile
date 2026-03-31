@@ -1,19 +1,19 @@
 # Run in regular mode
 run:
-	go run -tags rgfw .
+	go run .
 
 # Start with visual debugger
 dbg:
-	go run -tags rgfw . --debug
+	go run . --debug
 
 # Run tests specified in main.go
 test:
-	go run -tags rgfw . --test
+	go run . --test
 
 # Enable Logging in Gameboy-Doctor format
 log:
-	go run -tags rgfw . --log
+	go run . --log
 
 # Build in regular mode
 build:
-	go build -tags rgfw .
+	go build .

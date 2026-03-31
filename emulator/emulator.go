@@ -9,6 +9,8 @@ import (
 	"go-boy/rom"
 	"os"
 	"time"
+
+	"github.com/veandco/go-sdl2/sdl"
 )
 
 type Rom = rom.Rom
@@ -97,8 +99,25 @@ func (e *Emulator) Run() {
 	}
 }
 
-func (e *Emulator) Step() {
+func (e *Emulator) handleInput() {
+	if e.Ppu.Window.GetFlags()&sdl.WINDOW_INPUT_FOCUS != 0 {
+		for event := sdl.PollEvent(); event != nil; event = sdl.PollEvent() {
+			switch t := event.(type) {
+			case *sdl.QuitEvent: // NOTE: Please use `*sdl.QuitEvent` for `v0.4.x` (current version).
+				println("Quit")
+				// running = false
+				break
+			case *sdl.KeyboardEvent:
+				println("Keyboard event", t.Keysym.Sym)
 
+				break
+			}
+		}
+	}
+}
+
+func (e *Emulator) Step() {
+	e.handleInput()
 	ranMCyclesThisStep := uint64(1)
 	ranMCyclesThisStep += e.handleInterrupts()
 

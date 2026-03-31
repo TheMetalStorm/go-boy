@@ -84,6 +84,7 @@ func (d *Debugger) RunEmulator() {
 
 // Render should be called in the cimgui-go main loop (every frame)
 func (d *Debugger) Render() {
+
 	// Limit framerate to ~60FPS to prevent the unlocked SDL backend from spinning at >1000fps and eating the CPU.
 	elapsed := time.Since(lastFrameTime)
 	if elapsed < time.Millisecond*16 {
@@ -97,7 +98,6 @@ func (d *Debugger) Render() {
 	imgui.SetNextWindowSizeV(viewport.Size(), imgui.CondFirstUseEver)
 
 	imgui.Begin("GB Debugger")
-
 	// Control Row
 	imgui.Text("Control: ")
 	imgui.SameLine()

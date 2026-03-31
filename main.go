@@ -4,7 +4,6 @@ import (
 	"go-boy/debugger"
 	"go-boy/emulator"
 	"os"
-	"runtime/pprof"
 	"runtime"
 
 	"github.com/AllenDang/cimgui-go/backend"
@@ -37,10 +36,10 @@ var tests = []string{
 
 func main() {
 	runtime.LockOSThread()
-	f, _ := os.Create("cpu.prof")
+	// f, _ := os.Create("cpu.prof")
 
-	pprof.StartCPUProfile(f)
-	defer pprof.StopCPUProfile()
+	// pprof.StartCPUProfile(f)
+	// defer pprof.StopCPUProfile()
 
 	var e *Emulator = emulator.NewEmulator()
 	isDebugMode := false
@@ -64,29 +63,37 @@ func main() {
 		}
 
 	}
+
+	b, _ := backend.CreateBackend(sdlbackend.NewSDLBackend())
+
 	if logFile != nil {
 		defer logFile.Close()
 	}
+	b.SetBgColor(imgui.NewVec4(0.1, 0.1, 0.1, 1.0))
+	b.SetWindowFlags(sdlbackend.SDLWindowFlagsTransparent, 1)
+
+	//Since Imgui created our SDL Context, we always have to create at least one window through ImGUI for sdl (events) to work
+	b.CreateWindow("GB Debugger", 1200, 900)
 
 	if isDebugMode {
 		dbg := debugger.NewDebugger()
 		dbg.SetEmu(e)
-		
-		b, _ := backend.CreateBackend(sdlbackend.NewSDLBackend())
-		b.SetBgColor(imgui.NewVec4(0.1, 0.1, 0.1, 1.0))
-		b.CreateWindow("GB Debugger", 1200, 900)
-		
+
 		go dbg.RunEmulator()
-		
+		// dbg.CreateTileViewer()
 		b.Run(func() {
+			e.Ppu.Step(e.Cpu)
 			dbg.Render()
 		})
+
 	} else {
 		if test {
 			e.RunTests(tests)
 		}
 		e.Cpu.LogFile = logFile
-		e.Run()
+		go e.Run()
+		e.Ppu.Render(e.Cpu)
+
 	}
 
 }
