@@ -1,21 +1,50 @@
 package draw
 
 import (
+	"fmt"
 	"go-boy/cpu"
 	"go-boy/mmap"
 	"image/color"
 )
 
-var color1 = color.RGBA{0x75, 0xa9, 0x73, 0xFF}
+var color1 = color.RGBA{0xFF, 0x73, 0xff, 0x75}
+
+// var color1 = color.RGBA{0x75, 0xff, 0x73, 0xFF}
 var color2 = color.RGBA{0x72, 0xa3, 0x81, 0xFF}
 var color3 = color.RGBA{0x74, 0x99, 0x89, 0xFF}
 var color4 = color.RGBA{0x77, 0x97, 0x8a, 0xFF}
+
+const TILE_DATA_START = 0x8000
 
 type Tile struct {
 	Lines [8]uint16
 }
 
+func (t Tile) GetRGBAPixels() []color.RGBA {
+	img := make([]color.RGBA, 64)
 
+	//Assign
+	for y := range 8 {
+		currentLine := t.Lines[y]
+		for x := range 8 {
+			colorLsb := 0
+			colorMsb := 0
+
+			if mmap.GetBit16(currentLine, uint8(x)) {
+				colorLsb = 1
+			}
+			if mmap.GetBit16(currentLine, uint8(8+x)) {
+				colorMsb = 1
+			}
+			colorBits := colorLsb | (colorMsb << 1)
+			c := getColor(colorBits)
+			img[y*8+x] = c
+		}
+	}
+
+	return img
+
+}
 
 // func RenderTileToScreen(tile Tile, positionX int, positionY int, screen rl.RenderTexture2D) {
 
@@ -54,6 +83,27 @@ type Tile struct {
 
 func RenderObjectsToScreen(objects []Tile, screen interface{}) {
 	// Stubbed
+}
+
+func ReadTileAbs(tileNumber uint16, cpu *cpu.Cpu) Tile {
+	var tile Tile
+
+	for i := 0; i < 8; i++ {
+		leftPart, _ := cpu.Memory.ReadByteAt(TILE_DATA_START + tileNumber*16 + uint16(i*2))
+		rightPart, _ := cpu.Memory.ReadByteAt(TILE_DATA_START + tileNumber*16 + uint16(i*2+1))
+		tile.Lines[i] = uint16(leftPart) | uint16(rightPart)<<8
+	}
+
+	if tileNumber == 1 {
+		println("\nFROM TILES")
+
+		//print as hex numbers
+		for i := 0; i < 8; i++ {
+			fmt.Printf("%04x ", tile.Lines[i])
+		}
+		fmt.Println()
+	}
+	return tile
 }
 
 func ReadTile(tileDataOffset uint16, cpu *cpu.Cpu, isObject bool) Tile {
@@ -95,7 +145,8 @@ func getColor(bits int) color.RGBA {
 	case 3:
 		return color4
 	default:
-		return color.RGBA{0, 0, 0, 0xFF}
+		print("Invalid color bits: ", bits)
+		return color.RGBA{255, 255, 0, 255}
 	}
 
 }
