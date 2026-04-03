@@ -3,6 +3,7 @@ package ppu
 import (
 	_ "fmt"
 	"go-boy/cpu"
+	"go-boy/ioregs"
 	"time"
 
 	"github.com/veandco/go-sdl2/sdl"
@@ -13,6 +14,8 @@ type Ppu struct {
 	running          bool
 	Surface          *sdl.Surface
 	Window           *sdl.Window
+
+	currentDot uint64
 }
 
 var TILE_DATA_START int = 0x8000
@@ -45,20 +48,39 @@ func (p *Ppu) Restart(screenMultiplier int) {
 		p.screenMultiplier = screenMultiplier
 	}
 	p.running = true
+	p.currentDot = 0
+}
+
+func (p *Ppu) Step(cpu *cpu.Cpu, ranMCyclesThisStep uint64) {
+
+	ranDotsThisCPUStep := ranMCyclesThisStep * 4 //Double Speed Mode : * 2
+	p.currentDot += ranDotsThisCPUStep
+
+	if p.currentDot >= 456 {
+		p.currentDot = 0
+		cpu.Memory.Io.SetLY(cpu.Memory.Io.GetLY() + 1)
+		if cpu.Memory.Io.GetLY() == 144 {
+			cpu.Memory.Io.SetInterruptFlagBit(ioregs.VBLANK, true)
+		}
+		if cpu.Memory.Io.GetLY() > 153 {
+			cpu.Memory.Io.SetLY(0)
+		}
+		cpu.Memory.Io.SetSTATBit(ioregs.STAT_LY_EQ_LYC, cpu.Memory.Io.GetLY() == cpu.Memory.Io.GetLYC())
+		if cpu.Memory.Io.GetSTATBit(ioregs.STAT_LY_EQ_LYC) && cpu.Memory.Io.GetSTATBit(ioregs.STAT_LYC_INT) {
+			cpu.Memory.Io.SetInterruptFlagBit(ioregs.LCD, true)
+		}
+
+	}
+
 }
 
 func (p *Ppu) Render(cpu *cpu.Cpu) {
-	for p.running {
-		p.Step(cpu)
-	}
-}
-
-func (p *Ppu) Step(cpu *cpu.Cpu) {
 
 	p.Surface.FillRect(nil, 0)
 	rect := sdl.Rect{0, 0, int32(time.Now().Second()), 200}
 	colour := sdl.Color{R: 255, G: 0, B: 255, A: 255} // purple
-	pixel := sdl.MapRGBA(p.Surface.Format, colour.R, colour.G, colour.B, colour.A)
+	format, _ := sdl.AllocFormat(sdl.PIXELFORMAT_RGBA8888)
+	pixel := sdl.MapRGBA(format, colour.R, colour.G, colour.B, colour.A)
 	p.Surface.FillRect(&rect, pixel)
 	p.Window.UpdateSurface()
 	// for p.running {
