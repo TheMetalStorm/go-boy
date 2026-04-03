@@ -1,6 +1,7 @@
 package ioregs
 
 type InterruptFlags uint8
+type StatFlags uint8
 
 const (
 	VBLANK InterruptFlags = iota
@@ -11,6 +12,16 @@ const (
 	UNNUSED1
 	UNNUSED2
 	UNNUSED3
+)
+
+const (
+	STAT_PPU_MODE StatFlags = iota
+	UNUSED_STAT_PPU_MODE_EXTRA
+	STAT_LY_EQ_LYC
+	STAT_MODE_0_INT
+	STAT_MODE_1_INT
+	STAT_MODE_2_INT
+	STAT_LYC_INT
 )
 
 type Ioregs struct {
@@ -258,6 +269,27 @@ func (i *Ioregs) GetSTAT() uint8 {
 
 func (i *Ioregs) SetSTAT(value uint8) {
 	i.Regs[0x41] = value
+
+}
+
+func (i *Ioregs) SetSTATBit(bit StatFlags, value bool) {
+	stat := i.GetSTAT()
+	if value {
+		stat |= uint8(bit)
+	} else {
+		stat &= ^uint8(bit)
+	}
+	i.SetSTAT(stat)
+}
+
+func (i *Ioregs) GetSTATBit(bit StatFlags) bool {
+	stat := i.GetSTAT()
+	isSet := (stat >> bit) & 0x1
+	if isSet == 1 {
+		return true
+	} else {
+		return false
+	}
 }
 
 func (i *Ioregs) GetSCY() uint8 {
@@ -278,6 +310,10 @@ func (i *Ioregs) SetSCX(value uint8) {
 
 func (i *Ioregs) GetLY() uint8 {
 	return i.Regs[0x44]
+}
+
+func (i *Ioregs) SetLY(value uint8) {
+	i.Regs[0x44] = value
 }
 
 func (i *Ioregs) GetLYC() uint8 {
