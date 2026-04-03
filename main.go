@@ -78,11 +78,9 @@ func main() {
 	if isDebugMode {
 		dbg := debugger.NewDebugger()
 		dbg.SetEmu(e)
-
 		go dbg.RunEmulator()
-		// dbg.CreateTileViewer()
 		b.Run(func() {
-			e.Ppu.Step(e.Cpu)
+
 			dbg.Render()
 		})
 
@@ -91,8 +89,7 @@ func main() {
 			e.RunTests(tests)
 		}
 		e.Cpu.LogFile = logFile
-		go e.Run()
-		e.Ppu.Render(e.Cpu)
+		e.Run()
 
 	}
 
