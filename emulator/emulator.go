@@ -125,14 +125,19 @@ func (e *Emulator) Step() {
 		ranMCyclesThisStep += e.Cpu.Step()
 	}
 	e.Cpu.UpdateTimers(ranMCyclesThisStep)
-	//fmt.Sprintf("%04x\n", e.Cpu.PC)
-	// if e.doRender {
-	// e.Ppu.Step(e.Cpu)
-	// e.doRender = false
-	// }
+
+	e.Ppu.Step(e.Cpu, ranMCyclesThisStep)
 
 	e.ranMCyclesThisFrame += ranMCyclesThisStep
+	e.Render()
+}
 
+func (e *Emulator) Render() {
+	if e.ranMCyclesThisFrame >= MAX_CYCLES_PER_FRAME {
+		e.ranMCyclesThisFrame = 0
+		e.Ppu.Render(e.Cpu)
+		time.Sleep(time.Second / 60)
+	}
 }
 
 func (e *Emulator) handleInterrupts() uint64 {
