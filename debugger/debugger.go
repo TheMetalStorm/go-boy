@@ -2,11 +2,14 @@ package debugger
 
 import (
 	"fmt"
+	"go-boy/draw"
 	"go-boy/emulator"
 	"slices"
 	"time"
+	"unsafe"
 
 	"github.com/AllenDang/cimgui-go/imgui"
+	"github.com/veandco/go-sdl2/sdl"
 )
 
 type Emulator = emulator.Emulator
@@ -17,11 +20,35 @@ type Debugger struct {
 	breakpoints []uint16
 	lastBPHit   int
 
+	window  *sdl.Window
+	surface *sdl.Surface
+
 	e *Emulator
 }
 
+const TILE_SIZE = 8
+const TILE_VIEWER_TILES_X = 16
+const TILE_VIEWER_TILES_Y = 24
+const TILE_VIEWER_SURFACE_WIDTH = TILE_SIZE * TILE_VIEWER_TILES_X
+const TILE_VIEWER_SURFACE_HEIGHT = TILE_SIZE * TILE_VIEWER_TILES_Y
+const TILE_VIEWER_SCALE = 5
+const TILE_VIEWER_WIDTH = TILE_VIEWER_SURFACE_WIDTH * TILE_VIEWER_SCALE
+const TILE_VIEWER_HEIGHT = TILE_VIEWER_SURFACE_HEIGHT * TILE_VIEWER_SCALE
+
 func NewDebugger() *Debugger {
 	dbg := &Debugger{}
+	window, err := sdl.CreateWindow("Tile Viewer", sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED, TILE_VIEWER_WIDTH, TILE_VIEWER_HEIGHT, sdl.WINDOW_SHOWN)
+	if err != nil {
+		panic(err)
+	}
+	dbg.window = window
+
+	surface, err := window.GetSurface()
+	if err != nil {
+		panic(err)
+	}
+
+	dbg.surface = surface
 	dbg.reset()
 	return dbg
 }
@@ -80,17 +107,58 @@ func (d *Debugger) RunEmulator() {
 			}
 		}
 	}
+
+}
+
+func (d *Debugger) renderTileViewer() {
+
+	d.surface.FillRect(nil, 0)
+
+	srcRect := sdl.Rect{0, 0, TILE_SIZE, TILE_SIZE}
+
+	tiles := make([]draw.Tile, 384)
+	for i := range tiles {
+		tiles[i] = draw.ReadTileAbs(uint16(i), d.e.Cpu)
+	}
+
+	for y := range TILE_VIEWER_TILES_Y {
+		for x := range TILE_VIEWER_TILES_X {
+			ind := y*TILE_VIEWER_TILES_X + x
+			curTile := tiles[ind]
+			surf, sErr := sdl.CreateRGBSurfaceWithFormatFrom(unsafe.Pointer(&curTile.GetRGBAPixels()[0]), TILE_SIZE, TILE_SIZE, 32, TILE_SIZE*4, sdl.PIXELFORMAT_RGBA8888)
+			if sErr != nil {
+				panic(sErr)
+			}
+			dstReact := sdl.Rect{
+				X: int32(x * TILE_SIZE * TILE_VIEWER_SCALE),
+				Y: int32(y * TILE_SIZE * TILE_VIEWER_SCALE),
+				W: int32(TILE_SIZE * TILE_VIEWER_SCALE),
+				H: int32(TILE_SIZE * TILE_VIEWER_SCALE),
+			}
+
+			// d.surface.Lock()
+			// d.surface.BlitScaled(&srcRect, surf, &dstReact)
+			surf.BlitScaled(&srcRect, d.surface, &dstReact)
+			// d.surface.Blit(nil, surf, nil)
+			// d.surface.Unlock()
+			surf.Free()
+		}
+	}
+
+	print(d.e.Cpu.Memory.ReadByteAt(0x8012))
+
+	err := d.window.UpdateSurface()
+	if err != nil {
+		panic(err)
+	}
+
 }
 
 // Render should be called in the cimgui-go main loop (every frame)
 func (d *Debugger) Render() {
 
 	// Limit framerate to ~60FPS to prevent the unlocked SDL backend from spinning at >1000fps and eating the CPU.
-	elapsed := time.Since(lastFrameTime)
-	if elapsed < time.Millisecond*16 {
-		time.Sleep(time.Millisecond*16 - elapsed)
-	}
-	lastFrameTime = time.Now()
+	//d.renderTileViewer()
 
 	// Main UI
 	viewport := imgui.MainViewport()
@@ -108,8 +176,10 @@ func (d *Debugger) Render() {
 	if imgui.Button("Stop") {
 		d.autorun = false
 	}
+
 	imgui.SameLine()
-	if imgui.Button("Step") {
+	imgui.Button("Step")
+	if imgui.IsItemActive() {
 		d.doStep = true
 	}
 	imgui.SameLine()
