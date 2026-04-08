@@ -3,27 +3,24 @@
 package emulator
 
 import (
-	"go-boy/cpu"
-	"go-boy/ioregs"
-	"go-boy/ppu"
-	"go-boy/rom"
+	"go-boy/internal"
 	"os"
 	"time"
 
 	"github.com/veandco/go-sdl2/sdl"
 )
 
-type Rom = rom.Rom
-type Cpu = cpu.Cpu
+type Rom = internal.Rom
+type Cpu = internal.Cpu
 
-type Ppu = ppu.Ppu
+type Ppu = internal.Ppu
 
 // http://www.codeslinger.co.uk/pages/projects/gameboy/beginning.html
 var MAX_CYCLES_PER_FRAME uint64 = 69905
 var GB_CLOCK_SPEED_HZ uint64 = 4194304
 var DIV_REG_INCREMENT_HZ = 16384
 
-var mult int = 5
+var screenSizeMultiplier int = 5
 
 type Emulator struct {
 	Cpu         *Cpu
@@ -39,18 +36,22 @@ type Emulator struct {
 func NewEmulator() *Emulator {
 	emu := &Emulator{}
 	emu.doRender = true
-	emu.Cpu = cpu.NewCpu()
-	emu.Ppu = ppu.NewPpu(mult)
+	emu.Cpu = internal.NewCpu()
+	emu.Ppu = internal.NewPpu(screenSizeMultiplier)
+
+	emu.Ppu.Cpu = emu.Cpu
+	emu.Cpu.Ppu = emu.Ppu
+
 	emu.Restart()
 	return emu
 }
 
 func (e *Emulator) Restart() {
 	e.Cpu.Restart()
-	e.Ppu.Restart(mult)
+	e.Ppu.Restart(screenSizeMultiplier)
 	e.ranMCyclesThisFrame = 0
 
-	e.currentGame = rom.NewRom("./games/Tetris.gb")
+	e.currentGame = internal.NewRom("./games/Tetris.gb")
 
 	e.LoadRom(e.currentGame)
 }
@@ -59,7 +60,7 @@ func (e *Emulator) LoadRom(r *Rom) {
 	// TODO: for now only fills bank 0 + 1, no  Memory Bank Controllers (MBCs)
 	for i := 0x0; i <= 0x7fff; i++ {
 		newVal, _ := r.ReadByteAt(uint16(i))
-		e.Cpu.Memory.SetValue(uint16(i), newVal)
+		e.Cpu.Memory.SetValueForRom(uint16(i), newVal)
 	}
 }
 
@@ -70,7 +71,7 @@ func (e *Emulator) RunTests(tests []string) {
 	for _, test := range tests {
 		startNext = false
 		e.Restart()
-		e.currentGame = rom.NewRom(test)
+		e.currentGame = internal.NewRom(test)
 		e.LoadRom(e.currentGame)
 		for {
 			if startNext {
@@ -94,8 +95,10 @@ func changeBool(startNextTest *bool) {
 
 func (e *Emulator) Run() {
 	for {
+
 		e.SerialOut()
 		e.Step()
+
 	}
 }
 
@@ -117,6 +120,7 @@ func (e *Emulator) handleInput() {
 }
 
 func (e *Emulator) Step() {
+
 	e.handleInput()
 	ranMCyclesThisStep := uint64(1)
 	ranMCyclesThisStep += e.handleInterrupts()
@@ -126,17 +130,14 @@ func (e *Emulator) Step() {
 	}
 	e.Cpu.UpdateTimers(ranMCyclesThisStep)
 
-	e.Ppu.Step(e.Cpu, ranMCyclesThisStep)
+	e.Ppu.Step(ranMCyclesThisStep)
 
 	e.ranMCyclesThisFrame += ranMCyclesThisStep
-	e.Render()
-}
 
-func (e *Emulator) Render() {
 	if e.ranMCyclesThisFrame >= MAX_CYCLES_PER_FRAME {
 		e.ranMCyclesThisFrame = 0
-		e.Ppu.Render(e.Cpu)
 		time.Sleep(time.Second / 60)
+		e.Ppu.Render()
 	}
 }
 
@@ -151,24 +152,24 @@ func (e *Emulator) handleInterrupts() uint64 {
 	if e.Cpu.IME {
 		if activeInterrupts != 0 {
 			e.Cpu.SP--
-			e.Cpu.Memory.SetValue(e.Cpu.SP, cpu.GetHigher8(e.Cpu.PC))
+			e.Cpu.Memory.SetValue(e.Cpu.SP, internal.GetHigher8(e.Cpu.PC))
 			e.Cpu.SP--
-			e.Cpu.Memory.SetValue(e.Cpu.SP, cpu.GetLower8(e.Cpu.PC))
+			e.Cpu.Memory.SetValue(e.Cpu.SP, internal.GetLower8(e.Cpu.PC))
 
-			if e.Cpu.Memory.GetInterruptEnabledBit(ioregs.VBLANK) && e.Cpu.Memory.Io.GetInterruptFlagBit(ioregs.VBLANK) {
-				e.Cpu.Memory.Io.SetInterruptFlagBit(ioregs.VBLANK, false)
+			if e.Cpu.Memory.GetInterruptEnabledBit(internal.VBLANK) && e.Cpu.Memory.Io.GetInterruptFlagBit(internal.VBLANK) {
+				e.Cpu.Memory.Io.SetInterruptFlagBit(internal.VBLANK, false)
 				e.Cpu.PC = 0x0040
-			} else if e.Cpu.Memory.GetInterruptEnabledBit(ioregs.LCD) && e.Cpu.Memory.Io.GetInterruptFlagBit(ioregs.LCD) {
-				e.Cpu.Memory.Io.SetInterruptFlagBit(ioregs.LCD, false)
+			} else if e.Cpu.Memory.GetInterruptEnabledBit(internal.LCD) && e.Cpu.Memory.Io.GetInterruptFlagBit(internal.LCD) {
+				e.Cpu.Memory.Io.SetInterruptFlagBit(internal.LCD, false)
 				e.Cpu.PC = 0x0048
-			} else if e.Cpu.Memory.GetInterruptEnabledBit(ioregs.TIMER) && e.Cpu.Memory.Io.GetInterruptFlagBit(ioregs.TIMER) {
-				e.Cpu.Memory.Io.SetInterruptFlagBit(ioregs.TIMER, false)
+			} else if e.Cpu.Memory.GetInterruptEnabledBit(internal.TIMER) && e.Cpu.Memory.Io.GetInterruptFlagBit(internal.TIMER) {
+				e.Cpu.Memory.Io.SetInterruptFlagBit(internal.TIMER, false)
 				e.Cpu.PC = 0x0050
-			} else if e.Cpu.Memory.GetInterruptEnabledBit(ioregs.SERIAL) && e.Cpu.Memory.Io.GetInterruptFlagBit(ioregs.SERIAL) {
-				e.Cpu.Memory.Io.SetInterruptFlagBit(ioregs.SERIAL, false)
+			} else if e.Cpu.Memory.GetInterruptEnabledBit(internal.SERIAL) && e.Cpu.Memory.Io.GetInterruptFlagBit(internal.SERIAL) {
+				e.Cpu.Memory.Io.SetInterruptFlagBit(internal.SERIAL, false)
 				e.Cpu.PC = 0x0058
-			} else if e.Cpu.Memory.GetInterruptEnabledBit(ioregs.JOYPAD) && e.Cpu.Memory.Io.GetInterruptFlagBit(ioregs.JOYPAD) {
-				e.Cpu.Memory.Io.SetInterruptFlagBit(ioregs.JOYPAD, false)
+			} else if e.Cpu.Memory.GetInterruptEnabledBit(internal.JOYPAD) && e.Cpu.Memory.Io.GetInterruptFlagBit(internal.JOYPAD) {
+				e.Cpu.Memory.Io.SetInterruptFlagBit(internal.JOYPAD, false)
 				e.Cpu.PC = 0x0060
 			}
 			e.Cpu.IME = false

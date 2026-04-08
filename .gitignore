@@ -5,3 +5,5 @@ gb-log*
 .vscode/
 Build/
 *.exe
+
+* text=auto

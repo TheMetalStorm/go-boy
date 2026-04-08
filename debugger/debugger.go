@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"go-boy/draw"
 	"go-boy/emulator"
+	"go-boy/internal"
 	"slices"
 	"time"
 	"unsafe"
@@ -22,6 +23,8 @@ type Debugger struct {
 
 	window  *sdl.Window
 	surface *sdl.Surface
+
+	oldRenderMode internal.PpuMode
 
 	e *Emulator
 }
@@ -58,6 +61,7 @@ func (d *Debugger) reset() {
 	d.doStep = false
 	d.lastBPHit = -1
 	d.breakpoints = nil
+
 }
 
 func (d *Debugger) GetBreakpoints() []uint16 {
@@ -112,53 +116,55 @@ func (d *Debugger) RunEmulator() {
 
 func (d *Debugger) renderTileViewer() {
 
-	d.surface.FillRect(nil, 0)
+	// we only draw after if we just left mode 3, to catch the last line of the frame
+	if d.e.Cpu.Memory.Io.GetLY() == 143 {
+		d.surface.FillRect(nil, 0)
 
-	srcRect := sdl.Rect{0, 0, TILE_SIZE, TILE_SIZE}
+		srcRect := sdl.Rect{0, 0, TILE_SIZE, TILE_SIZE}
 
-	tiles := make([]draw.Tile, 384)
-	for i := range tiles {
-		tiles[i] = draw.ReadTileAbs(uint16(i), d.e.Cpu)
-	}
-
-	for y := range TILE_VIEWER_TILES_Y {
-		for x := range TILE_VIEWER_TILES_X {
-			ind := y*TILE_VIEWER_TILES_X + x
-			curTile := tiles[ind]
-			surf, sErr := sdl.CreateRGBSurfaceWithFormatFrom(unsafe.Pointer(&curTile.GetRGBAPixels()[0]), TILE_SIZE, TILE_SIZE, 32, TILE_SIZE*4, sdl.PIXELFORMAT_RGBA8888)
-			if sErr != nil {
-				panic(sErr)
-			}
-			dstReact := sdl.Rect{
-				X: int32(x * TILE_SIZE * TILE_VIEWER_SCALE),
-				Y: int32(y * TILE_SIZE * TILE_VIEWER_SCALE),
-				W: int32(TILE_SIZE * TILE_VIEWER_SCALE),
-				H: int32(TILE_SIZE * TILE_VIEWER_SCALE),
-			}
-
-			// d.surface.Lock()
-			// d.surface.BlitScaled(&srcRect, surf, &dstReact)
-			surf.BlitScaled(&srcRect, d.surface, &dstReact)
-			// d.surface.Blit(nil, surf, nil)
-			// d.surface.Unlock()
-			surf.Free()
+		tiles := make([]draw.Tile, 384)
+		for i := range tiles {
+			tiles[i] = draw.ReadTileAbs(uint16(i), d.e.Cpu)
 		}
-	}
 
-	print(d.e.Cpu.Memory.ReadByteAt(0x8012))
+		for y := range TILE_VIEWER_TILES_Y {
+			for x := range TILE_VIEWER_TILES_X {
+				ind := y*TILE_VIEWER_TILES_X + x
+				curTile := tiles[ind]
+				surf, sErr := sdl.CreateRGBSurfaceWithFormatFrom(unsafe.Pointer(&curTile.GetRGBAPixels(true)[0]), TILE_SIZE, TILE_SIZE, 32, TILE_SIZE*4, sdl.PIXELFORMAT_RGBA8888)
+				if sErr != nil {
+					panic(sErr)
+				}
+				dstReact := sdl.Rect{
+					X: int32(x * TILE_SIZE * TILE_VIEWER_SCALE),
+					Y: int32(y * TILE_SIZE * TILE_VIEWER_SCALE),
+					W: int32(TILE_SIZE * TILE_VIEWER_SCALE),
+					H: int32(TILE_SIZE * TILE_VIEWER_SCALE),
+				}
 
-	err := d.window.UpdateSurface()
-	if err != nil {
-		panic(err)
+				// d.surface.Lock()
+				// d.surface.BlitScaled(&srcRect, surf, &dstReact)
+				surf.BlitScaled(&srcRect, d.surface, &dstReact)
+				// d.surface.Blit(nil, surf, nil)
+				// d.surface.Unlock()
+				surf.Free()
+			}
+		}
+
+		err := d.window.UpdateSurface()
+		if err != nil {
+			panic(err)
+		}
+
 	}
+	d.oldRenderMode = d.e.Ppu.CurrentMode
 
 }
 
 // Render should be called in the cimgui-go main loop (every frame)
 func (d *Debugger) Render() {
 
-	// Limit framerate to ~60FPS to prevent the unlocked SDL backend from spinning at >1000fps and eating the CPU.
-	//d.renderTileViewer()
+	d.renderTileViewer()
 
 	// Main UI
 	viewport := imgui.MainViewport()
@@ -178,10 +184,16 @@ func (d *Debugger) Render() {
 	}
 
 	imgui.SameLine()
-	imgui.Button("Step")
+	if imgui.Button("Step") {
+		d.doStep = true
+	}
+
+	imgui.SameLine()
+	imgui.Button("FastStep")
 	if imgui.IsItemActive() {
 		d.doStep = true
 	}
+
 	imgui.SameLine()
 	if imgui.Button("Restart Machine") {
 		d.autorun = false

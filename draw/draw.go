@@ -2,14 +2,13 @@ package draw
 
 import (
 	"fmt"
-	"go-boy/cpu"
-	"go-boy/mmap"
+	"go-boy/internal"
 	"image/color"
 )
 
-var color1 = color.RGBA{0xFF, 0x73, 0xff, 0x75}
+var colorTransparent = color.RGBA{0x00, 0x00, 0x00, 0x00}
 
-// var color1 = color.RGBA{0x75, 0xff, 0x73, 0xFF}
+var color1 = color.RGBA{0x75, 0xff, 0x73, 0xFF}
 var color2 = color.RGBA{0x72, 0xa3, 0x81, 0xFF}
 var color3 = color.RGBA{0x74, 0x99, 0x89, 0xFF}
 var color4 = color.RGBA{0x77, 0x97, 0x8a, 0xFF}
@@ -20,7 +19,7 @@ type Tile struct {
 	Lines [8]uint16
 }
 
-func (t Tile) GetRGBAPixels() []color.RGBA {
+func (t Tile) GetRGBAPixels(isObject bool) []color.RGBA {
 	img := make([]color.RGBA, 64)
 
 	//Assign
@@ -30,14 +29,14 @@ func (t Tile) GetRGBAPixels() []color.RGBA {
 			colorLsb := 0
 			colorMsb := 0
 
-			if mmap.GetBit16(currentLine, uint8(x)) {
+			if internal.GetBit16(currentLine, uint8(x)) {
 				colorLsb = 1
 			}
-			if mmap.GetBit16(currentLine, uint8(8+x)) {
+			if internal.GetBit16(currentLine, uint8(8+x)) {
 				colorMsb = 1
 			}
 			colorBits := colorLsb | (colorMsb << 1)
-			c := getColor(colorBits)
+			c := getColor(colorBits, isObject)
 			img[y*8+x] = c
 		}
 	}
@@ -85,12 +84,12 @@ func RenderObjectsToScreen(objects []Tile, screen interface{}) {
 	// Stubbed
 }
 
-func ReadTileAbs(tileNumber uint16, cpu *cpu.Cpu) Tile {
+func ReadTileAbs(tileNumber uint16, c *internal.Cpu) Tile {
 	var tile Tile
 
 	for i := 0; i < 8; i++ {
-		leftPart, _ := cpu.Memory.ReadByteAt(TILE_DATA_START + tileNumber*16 + uint16(i*2))
-		rightPart, _ := cpu.Memory.ReadByteAt(TILE_DATA_START + tileNumber*16 + uint16(i*2+1))
+		leftPart, _ := c.Memory.ReadByteAtForced(TILE_DATA_START + tileNumber*16 + uint16(i*2))
+		rightPart, _ := c.Memory.ReadByteAtForced(TILE_DATA_START + tileNumber*16 + uint16(i*2+1))
 		tile.Lines[i] = uint16(leftPart) | uint16(rightPart)<<8
 	}
 
@@ -106,7 +105,7 @@ func ReadTileAbs(tileNumber uint16, cpu *cpu.Cpu) Tile {
 	return tile
 }
 
-func ReadTile(tileDataOffset uint16, cpu *cpu.Cpu, isObject bool) Tile {
+func ReadTile(tileDataOffset uint16, c *internal.Cpu, isObject bool) Tile {
 
 	var tileStart uint16
 
@@ -114,7 +113,7 @@ func ReadTile(tileDataOffset uint16, cpu *cpu.Cpu, isObject bool) Tile {
 		// Object
 		tileStart = 0x8000 + tileDataOffset
 	} else {
-		addressingMode := mmap.GetBit(cpu.Memory.Io.GetLCDC(), 4)
+		addressingMode := internal.GetBit(c.Memory.Io.GetLCDC(), 4)
 		if addressingMode { // LCD.4 = 1
 			// same as Object
 			tileStart = 0x8000 + tileDataOffset
@@ -128,16 +127,20 @@ func ReadTile(tileDataOffset uint16, cpu *cpu.Cpu, isObject bool) Tile {
 	}
 	var tile Tile
 	for i := 0; i < 8; i++ {
-		tile.Lines[i], _ = cpu.Memory.Read16At(tileStart + uint16(i))
+		tile.Lines[i], _ = c.Memory.Read16At(tileStart + uint16(i))
 	}
 	return tile
 }
 
-func getColor(bits int) color.RGBA {
+func getColor(bits int, isObject bool) color.RGBA {
 	//TODO: Get According to Palette
 	switch bits {
 	case 0:
-		return color1
+		if isObject {
+			return colorTransparent
+		} else {
+			return color1
+		}
 	case 1:
 		return color2
 	case 2:
