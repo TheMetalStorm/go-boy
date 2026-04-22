@@ -47,7 +47,7 @@ func (cpu *Cpu) Restart() {
 
 	cpu.Memory = &Mmap{}
 
-	cpu.Memory.ppu = cpu.Ppu
+	cpu.Memory.Ppu = cpu.Ppu
 
 	cpu.A = 0x01
 	cpu.F = 0xB0

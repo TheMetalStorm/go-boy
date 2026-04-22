@@ -2,15 +2,14 @@ package debugger
 
 import (
 	"fmt"
-	"go-boy/draw"
 	"go-boy/emulator"
 	"go-boy/internal"
 	"slices"
 	"time"
-	"unsafe"
 
-	"github.com/AllenDang/cimgui-go/imgui"
-	"github.com/veandco/go-sdl2/sdl"
+	"github.com/go-gl/gl/v3.3-core/gl"
+	"github.com/go-gl/glfw/v3.3/glfw"
+	"github.com/micahke/imgui-go"
 )
 
 type Emulator = emulator.Emulator
@@ -18,50 +17,29 @@ type Emulator = emulator.Emulator
 type Debugger struct {
 	autorun     bool
 	doStep      bool
+	doFastStep  bool
 	breakpoints []uint16
 	lastBPHit   int
 
-	window  *sdl.Window
-	surface *sdl.Surface
+	window *glfw.Window
 
 	oldRenderMode internal.PpuMode
 
 	e *Emulator
 }
 
-const TILE_SIZE = 8
-const TILE_VIEWER_TILES_X = 16
-const TILE_VIEWER_TILES_Y = 24
-const TILE_VIEWER_SURFACE_WIDTH = TILE_SIZE * TILE_VIEWER_TILES_X
-const TILE_VIEWER_SURFACE_HEIGHT = TILE_SIZE * TILE_VIEWER_TILES_Y
-const TILE_VIEWER_SCALE = 5
-const TILE_VIEWER_WIDTH = TILE_VIEWER_SURFACE_WIDTH * TILE_VIEWER_SCALE
-const TILE_VIEWER_HEIGHT = TILE_VIEWER_SURFACE_HEIGHT * TILE_VIEWER_SCALE
-
 func NewDebugger() *Debugger {
 	dbg := &Debugger{}
-	window, err := sdl.CreateWindow("Tile Viewer", sdl.WINDOWPOS_UNDEFINED, sdl.WINDOWPOS_UNDEFINED, TILE_VIEWER_WIDTH, TILE_VIEWER_HEIGHT, sdl.WINDOW_SHOWN)
-	if err != nil {
-		panic(err)
-	}
-	dbg.window = window
-
-	surface, err := window.GetSurface()
-	if err != nil {
-		panic(err)
-	}
-
-	dbg.surface = surface
 	dbg.reset()
 	return dbg
 }
 
 func (d *Debugger) reset() {
-	d.autorun = false
+	d.oldRenderMode = internal.MODE_2
+	d.autorun = true
 	d.doStep = false
 	d.lastBPHit = -1
 	d.breakpoints = nil
-
 }
 
 func (d *Debugger) GetBreakpoints() []uint16 {
@@ -84,13 +62,26 @@ func (d *Debugger) ToggleBP(addr uint16) {
 func (d *Debugger) SetEmu(emu *Emulator) {
 	d.reset()
 	d.e = emu
+	d.e.Ppu.HandleGLUpdate = false
 }
 
 var lastFrameTime time.Time
 
-// RunEmulator spins freely to execute CPU instructions at normal speed
+var lastLY uint8 = 0
+
 func (d *Debugger) RunEmulator() {
-	for {
+
+	for !d.e.Window.ShouldClose() {
+
+		//		d.e.Window.MakeContextCurrent()
+		glfw.PollEvents()
+
+		if d.e.Io.WantTextInput() {
+			d.e.Impl.SetDefaultKeyCallback()
+		} else {
+			d.e.Window.SetKeyCallback(d.debugKeyCallback)
+		}
+
 		d.e.SerialOut()
 		if d.autorun {
 			if slices.Contains(d.GetBreakpoints(), d.e.Cpu.PC) && d.e.Cpu.PC != uint16(d.lastBPHit) {
@@ -99,155 +90,77 @@ func (d *Debugger) RunEmulator() {
 			} else {
 				d.lastBPHit = -1
 				d.e.Step()
+
 			}
 		} else {
 			if d.doStep {
 				d.lastBPHit = -1
 				d.e.Step()
+				d.e.DoRender = true
 				d.doStep = false
-			} else {
-				// Prevent maxing a core just waiting for an un-paused state
-				time.Sleep(time.Millisecond * 5)
+			}
+			if d.doFastStep {
+				d.lastBPHit = -1
+				d.e.Step()
+				d.e.DoRender = true
 			}
 		}
+
+		if d.e.DoRender {
+			gl.Clear(gl.COLOR_BUFFER_BIT)
+
+			d.e.DoRender = false
+
+			d.e.Ppu.Render(d.e.Texture)
+
+			gl.UseProgram(d.e.Program)
+			gl.BindVertexArray(d.e.Vao)
+			gl.DrawArrays(gl.TRIANGLES, 0, 6)
+
+			d.e.Impl.NewFrame()
+			d.Render()
+			imgui.Render()
+			d.e.Impl.Render(imgui.RenderedDrawData())
+
+			d.e.Window.SwapBuffers()
+
+		}
+
 	}
 
 }
 
-func (d *Debugger) renderTileViewer() {
-
-	// we only draw after if we just left mode 3, to catch the last line of the frame
-	if d.e.Cpu.Memory.Io.GetLY() == 143 {
-		d.surface.FillRect(nil, 0)
-
-		srcRect := sdl.Rect{0, 0, TILE_SIZE, TILE_SIZE}
-
-		tiles := make([]draw.Tile, 384)
-		for i := range tiles {
-			tiles[i] = draw.ReadTileAbs(uint16(i), d.e.Cpu)
-		}
-
-		for y := range TILE_VIEWER_TILES_Y {
-			for x := range TILE_VIEWER_TILES_X {
-				ind := y*TILE_VIEWER_TILES_X + x
-				curTile := tiles[ind]
-				surf, sErr := sdl.CreateRGBSurfaceWithFormatFrom(unsafe.Pointer(&curTile.GetRGBAPixels(true)[0]), TILE_SIZE, TILE_SIZE, 32, TILE_SIZE*4, sdl.PIXELFORMAT_RGBA8888)
-				if sErr != nil {
-					panic(sErr)
-				}
-				dstReact := sdl.Rect{
-					X: int32(x * TILE_SIZE * TILE_VIEWER_SCALE),
-					Y: int32(y * TILE_SIZE * TILE_VIEWER_SCALE),
-					W: int32(TILE_SIZE * TILE_VIEWER_SCALE),
-					H: int32(TILE_SIZE * TILE_VIEWER_SCALE),
-				}
-
-				// d.surface.Lock()
-				// d.surface.BlitScaled(&srcRect, surf, &dstReact)
-				surf.BlitScaled(&srcRect, d.surface, &dstReact)
-				// d.surface.Blit(nil, surf, nil)
-				// d.surface.Unlock()
-				surf.Free()
-			}
-		}
-
-		err := d.window.UpdateSurface()
-		if err != nil {
-			panic(err)
-		}
-
-	}
-	d.oldRenderMode = d.e.Ppu.CurrentMode
-
-}
-
-// Render should be called in the cimgui-go main loop (every frame)
 func (d *Debugger) Render() {
 
-	d.renderTileViewer()
-
-	// Main UI
-	viewport := imgui.MainViewport()
-	imgui.SetNextWindowPosV(viewport.Pos(), imgui.CondFirstUseEver, imgui.NewVec2(0, 0))
-	imgui.SetNextWindowSizeV(viewport.Size(), imgui.CondFirstUseEver)
+	// imgui.SetNextWindowPosV(imgui.Vec2{X: 0, Y: 0}, imgui.ConditionAlways, imgui.Vec2{X: 0, Y: 0})
+	// imgui.SetNextWindowSizeV(imgui.Vec2{X: 1200, Y: 900}, imgui.ConditionAlways)
 
 	imgui.Begin("GB Debugger")
-	// Control Row
+
 	imgui.Text("Control: ")
 	imgui.SameLine()
-	if imgui.Button("Start") {
-		d.autorun = true
-	}
-	imgui.SameLine()
-	if imgui.Button("Stop") {
-		d.autorun = false
-	}
+	imgui.Text("F3=Start  F4=Stop  F5=Step  F6=FastStep  F7=Restart")
 
-	imgui.SameLine()
-	if imgui.Button("Step") {
-		d.doStep = true
-	}
-
-	imgui.SameLine()
-	imgui.Button("FastStep")
-	if imgui.IsItemActive() {
-		d.doStep = true
-	}
-
-	imgui.SameLine()
-	if imgui.Button("Restart Machine") {
-		d.autorun = false
-		d.e.Restart()
-	}
-
-	// Registers Table
 	imgui.Text("Regs: ")
-	if imgui.BeginTable("Regs", 13) {
-		imgui.TableSetupColumn(fmt.Sprintf("PC: 0x%04x", d.e.Cpu.PC))
-		imgui.TableSetupColumn(fmt.Sprintf("SP: 0x%04x", d.e.Cpu.SP))
-		imgui.TableSetupColumn(fmt.Sprintf("A: 0x%02x", d.e.Cpu.A))
-		imgui.TableSetupColumn(fmt.Sprintf("F: 0x%02x", d.e.Cpu.F))
-		imgui.TableSetupColumn(fmt.Sprintf("B: 0x%02x", d.e.Cpu.B))
-		imgui.TableSetupColumn(fmt.Sprintf("C: 0x%02x", d.e.Cpu.C))
-		imgui.TableSetupColumn(fmt.Sprintf("D: 0x%02x", d.e.Cpu.D))
-		imgui.TableSetupColumn(fmt.Sprintf("E: 0x%02x", d.e.Cpu.E))
-		imgui.TableSetupColumn(fmt.Sprintf("H: 0x%02x", d.e.Cpu.H))
-		imgui.TableSetupColumn(fmt.Sprintf("L: 0x%02x", d.e.Cpu.L))
-		imgui.TableSetupColumn(fmt.Sprintf("DIV: 0x%02x", d.e.Cpu.Memory.Io.GetDIV()))
-		imgui.TableSetupColumn(fmt.Sprintf("TIMA: 0x%02x", d.e.Cpu.Memory.Io.GetTIMA()))
-		imgui.TableSetupColumn(fmt.Sprintf("HALT: %t", d.e.Cpu.Halt))
+	if imgui.BeginTable("Regs", 13, imgui.TableFlags_None, imgui.Vec2{X: 0, Y: 0}, 0.0) {
+		imgui.TableSetupColumn(fmt.Sprintf("PC: 0x%04x", d.e.Cpu.PC), 0, 0, 0)
+		imgui.TableSetupColumn(fmt.Sprintf("SP: 0x%04x", d.e.Cpu.SP), 0, 0, 0)
+		imgui.TableSetupColumn(fmt.Sprintf("A: 0x%02x", d.e.Cpu.A), 0, 0, 0)
+		imgui.TableSetupColumn(fmt.Sprintf("F: 0x%02x", d.e.Cpu.F), 0, 0, 0)
+		imgui.TableSetupColumn(fmt.Sprintf("B: 0x%02x", d.e.Cpu.B), 0, 0, 0)
+		imgui.TableSetupColumn(fmt.Sprintf("C: 0x%02x", d.e.Cpu.C), 0, 0, 0)
+		imgui.TableSetupColumn(fmt.Sprintf("D: 0x%02x", d.e.Cpu.D), 0, 0, 0)
+		imgui.TableSetupColumn(fmt.Sprintf("E: 0x%02x", d.e.Cpu.E), 0, 0, 0)
+		imgui.TableSetupColumn(fmt.Sprintf("H: 0x%02x", d.e.Cpu.H), 0, 0, 0)
+		imgui.TableSetupColumn(fmt.Sprintf("L: 0x%02x", d.e.Cpu.L), 0, 0, 0)
+		imgui.TableSetupColumn(fmt.Sprintf("DIV: 0x%02x", d.e.Cpu.Memory.Io.GetDIV()), 0, 0, 0)
+		imgui.TableSetupColumn(fmt.Sprintf("TIMA: 0x%02x", d.e.Cpu.Memory.Io.GetTIMA()), 0, 0, 0)
+		imgui.TableSetupColumn(fmt.Sprintf("HALT: %t", d.e.Cpu.Halt), 0, 0, 0)
 		imgui.TableHeadersRow()
 		imgui.EndTable()
 	}
 
-	// Side-by-side Layout: Stack and Tabs
-	imgui.BeginChildStrV("StackRegion", imgui.NewVec2(200, 0), 0, 0)
-	imgui.Text("Stack: (HRAM)")
-	if imgui.BeginTable("Hram Stack", 2) {
-		hram := d.e.Cpu.Memory.Hram[:]
-		start := 0xff80
-		rowCount := int32(len(hram))
-		clipper := imgui.NewListClipper()
-		defer clipper.Destroy()
-		clipper.Begin(rowCount)
-		for clipper.Step() {
-			for r := clipper.DisplayStart(); r < clipper.DisplayEnd(); r++ {
-				i := len(hram) - 1 - int(r)
-				imgui.TableNextRow()
-				imgui.TableNextColumn()
-				imgui.Text(fmt.Sprintf("0x%04x:", start+i))
-				imgui.TableNextColumn()
-				imgui.Text(fmt.Sprintf("0x%02x", hram[i]))
-			}
-		}
-		imgui.EndTable()
-	}
-	imgui.EndChild()
-
-	imgui.SameLine()
-
-	imgui.BeginChildStrV("TabsRegion", imgui.NewVec2(0, 0), 0, 0)
-	// Tabs
+	imgui.BeginChild("TabsRegion")
 	if imgui.BeginTabBar("Memory Regions") {
 		if imgui.BeginTabItem("Bank0") {
 			d.RenderMemoryTable("Bank0", d.e.Cpu.Memory.GetBank0(), 0, true)
@@ -300,50 +213,67 @@ func (d *Debugger) Render() {
 	imgui.End()
 }
 
+func (d *Debugger) debugKeyCallback(w *glfw.Window, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
+	switch key {
+	case glfw.KeyF3:
+		if action == glfw.Press {
+			d.autorun = true
+		}
+	case glfw.KeyF4:
+		if action == glfw.Press {
+			d.autorun = false
+		}
+	case glfw.KeyF5:
+		if action == glfw.Press {
+			d.doStep = true
+		}
+	case glfw.KeyF6:
+		if action == glfw.Press {
+			d.doFastStep = true
+		} else if action == glfw.Release {
+			d.doFastStep = false
+		}
+	case glfw.KeyF7:
+		if action == glfw.Press {
+			d.autorun = false
+			d.e.Restart()
+			d.e.DoRender = true
+		}
+	}
+
+	KeyCallback(w, key, scancode, action, mods)
+}
+
 func (d *Debugger) RenderMemoryTable(id string, slice []uint8, offset uint32, debuggable bool) {
-	if imgui.BeginTable(id, 17) {
-		rowCount := int32((len(slice) + 15) / 16)
-		clipper := imgui.NewListClipper()
-		defer clipper.Destroy()
+	if imgui.BeginTable(id, 17, imgui.TableFlags_None, imgui.Vec2{X: 0, Y: 0}, 0.0) {
+		for i := 0; i < len(slice); i += 16 {
+			imgui.TableNextRow(0, 0.0)
+			imgui.TableNextColumn()
+			imgui.Text(fmt.Sprintf("0x%04x:", int(offset)+i))
 
-		clipper.Begin(rowCount)
-		for clipper.Step() {
-			for r := clipper.DisplayStart(); r < clipper.DisplayEnd(); r++ {
-				i := int(r) * 16
-				imgui.TableNextRow()
+			for j := 0; j < 16 && i+j < len(slice); j++ {
 				imgui.TableNextColumn()
-				imgui.Text(fmt.Sprintf("0x%04x:", int(offset)+i))
-
-				for j := 0; j < 16; j++ {
-					imgui.TableNextColumn()
-					localAddr := uint16(i + j)
-					if int(localAddr) < len(slice) {
-						globalAddr := uint16(offset) + localAddr
-						if debuggable {
-							pushed := 0
-							if d.isCurrentPC(globalAddr) {
-								imgui.PushStyleColorVec4(imgui.ColText, imgui.NewVec4(0, 1, 0, 1))
-								pushed++
-							} else if d.isInDebug(globalAddr) {
-								imgui.PushStyleColorVec4(imgui.ColText, imgui.NewVec4(0, 0.7, 0.7, 1))
-								pushed++
-							}
-
-							// Disable button framing to look like giu's styling
-							if imgui.SelectableBool(fmt.Sprintf("%02x##%04x", slice[localAddr], globalAddr)) {
-								d.ToggleBP(globalAddr)
-							}
-
-							for pushed > 0 {
-								imgui.PopStyleColor()
-								pushed--
-							}
-						} else {
-							if imgui.SelectableBool(fmt.Sprintf("%02x##%04x", slice[localAddr], globalAddr)) {
-								// Just visual
-							}
-						}
+				globalAddr := uint16(offset) + uint16(i+j)
+				if debuggable {
+					pushed := 0
+					if d.isCurrentPC(globalAddr) {
+						imgui.PushStyleColor(imgui.StyleColorText, imgui.Vec4{X: 0, Y: 1, Z: 0, W: 1})
+						pushed++
+					} else if d.isInDebug(globalAddr) {
+						imgui.PushStyleColor(imgui.StyleColorText, imgui.Vec4{X: 0, Y: 0.7, Z: 0.7, W: 1})
+						pushed++
 					}
+
+					if imgui.Selectable(fmt.Sprintf("%02x##%04x", slice[i+j], globalAddr)) {
+						d.ToggleBP(globalAddr)
+					}
+
+					for pushed > 0 {
+						imgui.PopStyleColor()
+						pushed--
+					}
+				} else {
+					imgui.Text(fmt.Sprintf("%02x", slice[i+j]))
 				}
 			}
 		}
@@ -357,4 +287,8 @@ func (d *Debugger) isCurrentPC(addr uint16) bool {
 
 func (d *Debugger) isInDebug(addr uint16) bool {
 	return slices.Contains(d.breakpoints, addr)
+}
+
+func KeyCallback(w *glfw.Window, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {
+
 }

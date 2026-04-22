@@ -1,7 +1,6 @@
 package draw
 
 import (
-	"fmt"
 	"go-boy/internal"
 	"image/color"
 )
@@ -93,15 +92,6 @@ func ReadTileAbs(tileNumber uint16, c *internal.Cpu) Tile {
 		tile.Lines[i] = uint16(leftPart) | uint16(rightPart)<<8
 	}
 
-	if tileNumber == 1 {
-		println("\nFROM TILES")
-
-		//print as hex numbers
-		for i := 0; i < 8; i++ {
-			fmt.Printf("%04x ", tile.Lines[i])
-		}
-		fmt.Println()
-	}
 	return tile
 }
 

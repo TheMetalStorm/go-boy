@@ -5,15 +5,11 @@ import (
 	"go-boy/emulator"
 	"os"
 	"runtime"
-
-	"github.com/AllenDang/cimgui-go/backend"
-	"github.com/AllenDang/cimgui-go/backend/sdlbackend"
-	"github.com/AllenDang/cimgui-go/imgui"
 )
 
 type Emulator = emulator.Emulator
 
-type Debugger = debugger.Debugger
+//type Debugger = debugger.Debugger
 
 var tests = []string{
 	"./testroms/blargg/instr_timing/instr_timing.gb",
@@ -35,18 +31,13 @@ var tests = []string{
 }
 
 func main() {
+
 	runtime.LockOSThread()
-	// f, _ := os.Create("cpu.prof")
 
-	// pprof.StartCPUProfile(f)
-	// defer pprof.StopCPUProfile()
-
-	var e *Emulator = emulator.NewEmulator()
 	isDebugMode := false
 	test := false
 	argsWithoutProg := os.Args[1:]
-	var err error
-	var logFile *os.File = nil
+	var logFile *os.File
 	if len(argsWithoutProg) >= 1 {
 		if argsWithoutProg[0] == "--debug" {
 			isDebugMode = true
@@ -55,6 +46,7 @@ func main() {
 		} else if argsWithoutProg[0] == "--log" {
 			filename := "gb-log"
 			os.Remove(filename)
+			var err error
 			logFile, err = os.OpenFile(filename, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
 			if err != nil {
 				panic(err)
@@ -64,27 +56,19 @@ func main() {
 
 	}
 
-	b, _ := backend.CreateBackend(sdlbackend.NewSDLBackend())
-
 	if logFile != nil {
 		defer logFile.Close()
 	}
-	b.SetBgColor(imgui.NewVec4(0.1, 0.1, 0.1, 1.0))
-	b.SetWindowFlags(sdlbackend.SDLWindowFlagsTransparent, 1)
 
-	//Since Imgui created our SDL Context, we always have to create at least one window through ImGUI for sdl (events) to work
-	b.CreateWindow("GB Debugger", 1200, 900)
+	var e *Emulator = emulator.NewEmulator()
 
 	if isDebugMode {
 		dbg := debugger.NewDebugger()
 		dbg.SetEmu(e)
-		go dbg.RunEmulator()
-		b.Run(func() {
-
-			dbg.Render()
-		})
+		dbg.RunEmulator()
 
 	} else {
+
 		if test {
 			e.RunTests(tests)
 		}
