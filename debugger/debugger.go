@@ -31,6 +31,7 @@ type Debugger struct {
 func NewDebugger() *Debugger {
 	dbg := &Debugger{}
 	dbg.reset()
+
 	return dbg
 }
 
@@ -111,7 +112,7 @@ func (d *Debugger) RunEmulator() {
 
 			d.e.DoRender = false
 
-			d.e.Ppu.Render(d.e.Texture)
+			d.e.Ppu.Render()
 
 			gl.UseProgram(d.e.Program)
 			gl.BindVertexArray(d.e.Vao)
@@ -124,10 +125,27 @@ func (d *Debugger) RunEmulator() {
 
 			d.e.Window.SwapBuffers()
 
+			// Render debug window
+			if d.e.DebugWindow != nil {
+				d.e.DebugWindow.MakeContextCurrent()
+				gl.Clear(gl.COLOR_BUFFER_BIT)
+				d.RenderTileViewer()
+				gl.UseProgram(d.e.Program)
+				gl.BindVertexArray(d.e.DebugVao)
+				gl.BindTexture(gl.TEXTURE_2D, d.e.Ppu.TileViewerTex)
+				gl.DrawArrays(gl.TRIANGLES, 0, 6)
+				d.e.DebugWindow.SwapBuffers()
+				d.e.Window.MakeContextCurrent()
+			}
+
 		}
 
 	}
 
+}
+
+func (d *Debugger) RenderTileViewer() {
+	d.e.Ppu.RenderTileViewer()
 }
 
 func (d *Debugger) Render() {

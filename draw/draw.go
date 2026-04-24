@@ -79,10 +79,6 @@ func (t Tile) GetRGBAPixels(isObject bool) []color.RGBA {
 
 // }
 
-func RenderObjectsToScreen(objects []Tile, screen interface{}) {
-	// Stubbed
-}
-
 func ReadTileAbs(tileNumber uint16, c *internal.Cpu) Tile {
 	var tile Tile
 

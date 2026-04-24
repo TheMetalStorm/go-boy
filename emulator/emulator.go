@@ -19,11 +19,11 @@ type Cpu = internal.Cpu
 
 type Ppu = internal.Ppu
 
-var MAX_CYCLES_PER_FRAME uint64 = 69905
+var MAX_CYCLES_PER_FRAME uint64 = 17556
 var GB_CLOCK_SPEED_HZ uint64 = 4194304
 var DIV_REG_INCREMENT_HZ = 16384
 
-var screenSizeMultiplier int = 5
+var ScreenSizeMultiplier int = 5
 
 var GB_WINDOW_WIDTH int = 160
 var GB_WINDOW_HEIGHT int = 144
@@ -75,9 +75,11 @@ type Emulator struct {
 	Window   *glfw.Window
 	context  *imgui.Context
 	Impl     *backend.ImguiGlfw3
-	Texture  uint32
 	Vao, vbo uint32
 	Program  uint32
+
+	DebugWindow        *glfw.Window
+	DebugVao, DebugVbo uint32
 
 	Io imgui.IO
 }
@@ -86,7 +88,7 @@ func NewEmulator() *Emulator {
 	emu := &Emulator{}
 	emu.DoRender = true
 	emu.Cpu = internal.NewCpu()
-	emu.Ppu = internal.NewPpu(screenSizeMultiplier)
+	emu.Ppu = internal.NewPpu(ScreenSizeMultiplier)
 
 	emu.Ppu.HandleGLUpdate = true
 
@@ -98,6 +100,7 @@ func NewEmulator() *Emulator {
 	emu.context, emu.Impl, emu.Io = initImgui(emu.Window)
 
 	emu.SetupGL()
+	emu.SetupDebugWindow()
 	emu.Restart()
 
 	return emu
@@ -122,7 +125,12 @@ func initOpenGl() *glfw.Window {
 	glfw.WindowHint(glfw.OpenGLForwardCompatible, glfw.True)
 
 	// Initialize window through go-gl/glfw
-	window, win_err := glfw.CreateWindow(GB_WINDOW_WIDTH*screenSizeMultiplier, GB_WINDOW_HEIGHT*screenSizeMultiplier, "Hello, world!", nil, nil)
+
+	//window, win_err := glfw.CreateWindow(GB_WINDOW_WIDTH*ScreenSizeMultiplier, GB_WINDOW_HEIGHT*ScreenSizeMultiplier, "Hello, world!", nil, nil)
+
+	//For now we draw the BG only
+	window, win_err := glfw.CreateWindow(internal.BG_WINDOW_X_Y*ScreenSizeMultiplier, internal.BG_WINDOW_X_Y*ScreenSizeMultiplier, "Background Layer", nil, nil)
+
 	if win_err != nil {
 		panic("Error creating window")
 	}
@@ -201,8 +209,8 @@ func compileShader(source string, shaderType uint32) uint32 {
 
 func (e *Emulator) SetupGL() {
 	gl.Enable(gl.TEXTURE_2D)
-	gl.GenTextures(1, &e.Texture)
-	gl.BindTexture(gl.TEXTURE_2D, e.Texture)
+	gl.GenTextures(1, &e.Ppu.ViewPortTex)
+	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.ViewPortTex)
 
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
@@ -231,20 +239,70 @@ func (e *Emulator) SetupGL() {
 	e.Program = createShaderProgram(vertexShaderSource, fragmentShaderSource)
 
 }
+
+func (e *Emulator) SetupDebugWindow() {
+	w := 16 * 8 * ScreenSizeMultiplier
+	h := 24 * 8 * ScreenSizeMultiplier
+	debugWindow, err := glfw.CreateWindow(w, h, "Debug View", nil, e.Window)
+	if err != nil {
+		panic("Error creating debug window")
+	}
+	e.DebugWindow = debugWindow
+
+	debugWindow.MakeContextCurrent()
+	gl.GenTextures(1, &e.Ppu.BackgroundTex)
+	println(gl.GetError())
+	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.BackgroundTex)
+
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
+	gl.GenTextures(1, &e.Ppu.WindowTex)
+	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.WindowTex)
+
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
+	gl.GenTextures(1, &e.Ppu.TileViewerTex)
+	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.TileViewerTex)
+
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+	gl.GenVertexArrays(1, &e.DebugVao)
+	gl.GenBuffers(1, &e.DebugVbo)
+
+	gl.BindVertexArray(e.DebugVao)
+	gl.BindBuffer(gl.ARRAY_BUFFER, e.DebugVbo)
+	gl.BufferData(gl.ARRAY_BUFFER, len(vertices)*4, gl.Ptr(vertices), gl.STATIC_DRAW)
+
+	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, 5*4, gl.PtrOffset(0))
+	gl.EnableVertexAttribArray(0)
+	gl.VertexAttribPointer(1, 2, gl.FLOAT, false, 5*4, gl.PtrOffset(3*4))
+	gl.EnableVertexAttribArray(1)
+
+	e.Window.MakeContextCurrent()
+}
+
 func (e *Emulator) SetWindow(window *glfw.Window) {
 	e.Window = window
 }
 
 func (e *Emulator) Restart() {
 	e.Cpu.Restart()
-	e.Ppu.Restart(screenSizeMultiplier)
+	e.Ppu.Restart(ScreenSizeMultiplier)
 	e.ranMCyclesThisFrame = 0
 
 	e.Ppu.Cpu = e.Cpu
 	e.Cpu.Ppu = e.Ppu
 	e.Cpu.Memory.Ppu = e.Ppu
 
-	e.currentGame = internal.NewRom("./games/Tetris.gb")
+	e.currentGame = internal.NewRom("./games/Dr.M.gb")
 
 	e.LoadRom(e.currentGame)
 }
@@ -299,7 +357,7 @@ func (e *Emulator) Render() {
 	if e.Ppu.HandleGLUpdate {
 		gl.Clear(gl.COLOR_BUFFER_BIT)
 
-		e.Ppu.Render(e.Texture)
+		e.Ppu.Render()
 
 		gl.UseProgram(e.Program)
 		gl.BindVertexArray(e.Vao)

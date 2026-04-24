@@ -42,7 +42,7 @@ func (m *Mmap) SetValue(address uint16, value uint8) {
 		m.bankN[address-0x4000] = value
 
 	case address < 0xA000:
-		if m.Ppu.CurrentMode == MODE_3 {
+		if GetBit(m.Io.GetLCDC(), 7) && m.Ppu.CurrentMode == MODE_3 {
 			return
 		}
 		m.vram[address-0x8000] = value
@@ -60,7 +60,7 @@ func (m *Mmap) SetValue(address uint16, value uint8) {
 		m.Echoram[address-0xE000] = value
 
 	case address < 0xFEA0:
-		if m.Ppu.CurrentMode == MODE_2 || m.Ppu.CurrentMode == MODE_3 {
+		if GetBit(m.Io.GetLCDC(), 7) && (m.Ppu.CurrentMode == MODE_2 || m.Ppu.CurrentMode == MODE_3) {
 			return
 		}
 		m.Oam[address-0xFE00] = value
@@ -94,7 +94,7 @@ func (m *Mmap) Read16At(address uint16) (data uint16, numReadBytes uint16) {
 		return uint16(a1 | a2<<8), 2
 
 	case address < 0xA000-1:
-		if m.Ppu.CurrentMode == MODE_3 {
+		if GetBit(m.Io.GetLCDC(), 7) && m.Ppu.CurrentMode == MODE_3 {
 			return 0xFF, 1
 		}
 		a1 := uint16(m.vram[address-0x8000])
@@ -122,7 +122,7 @@ func (m *Mmap) Read16At(address uint16) (data uint16, numReadBytes uint16) {
 		return uint16(a1 | a2<<8), 2
 
 	case address < 0xFEA0-1:
-		if m.Ppu.CurrentMode == MODE_2 || m.Ppu.CurrentMode == MODE_3 {
+		if GetBit(m.Io.GetLCDC(), 7) && (m.Ppu.CurrentMode == MODE_2 || m.Ppu.CurrentMode == MODE_3) {
 			return 0xFF, 1
 		}
 		a1 := uint16(m.Oam[address-0xFE00])
@@ -201,7 +201,7 @@ func (m *Mmap) ReadByteAt(address uint16) (val uint8, bytesRead uint16) {
 		return m.bankN[address-0x4000], 1
 
 	case address < 0xA000:
-		if m.Ppu.CurrentMode == MODE_3 {
+		if GetBit(m.Io.GetLCDC(), 7) && m.Ppu.CurrentMode == MODE_3 {
 			return 0xFF, 1
 		}
 		return m.vram[address-0x8000], 1
@@ -219,7 +219,7 @@ func (m *Mmap) ReadByteAt(address uint16) (val uint8, bytesRead uint16) {
 		return m.Echoram[address-0xE000], 1
 
 	case address < 0xFEA0:
-		if m.Ppu.CurrentMode == MODE_2 || m.Ppu.CurrentMode == MODE_3 {
+		if GetBit(m.Io.GetLCDC(), 7) && (m.Ppu.CurrentMode == MODE_2 || m.Ppu.CurrentMode == MODE_3) {
 			return 0xFF, 1
 		}
 		return m.Oam[address-0xFE00], 1
