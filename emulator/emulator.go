@@ -78,9 +78,6 @@ type Emulator struct {
 	Vao, vbo uint32
 	Program  uint32
 
-	DebugWindow        *glfw.Window
-	DebugVao, DebugVbo uint32
-
 	Io imgui.IO
 }
 
@@ -100,7 +97,7 @@ func NewEmulator() *Emulator {
 	emu.context, emu.Impl, emu.Io = initImgui(emu.Window)
 
 	emu.SetupGL()
-	emu.SetupDebugWindow()
+	emu.SetupDebugTextures()
 	emu.Restart()
 
 	return emu
@@ -240,18 +237,9 @@ func (e *Emulator) SetupGL() {
 
 }
 
-func (e *Emulator) SetupDebugWindow() {
-	w := 16 * 8 * ScreenSizeMultiplier
-	h := 24 * 8 * ScreenSizeMultiplier
-	debugWindow, err := glfw.CreateWindow(w, h, "Debug View", nil, e.Window)
-	if err != nil {
-		panic("Error creating debug window")
-	}
-	e.DebugWindow = debugWindow
+func (e *Emulator) SetupDebugTextures() {
 
-	debugWindow.MakeContextCurrent()
 	gl.GenTextures(1, &e.Ppu.BackgroundTex)
-	println(gl.GetError())
 	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.BackgroundTex)
 
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
@@ -274,17 +262,6 @@ func (e *Emulator) SetupDebugWindow() {
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-	gl.GenVertexArrays(1, &e.DebugVao)
-	gl.GenBuffers(1, &e.DebugVbo)
-
-	gl.BindVertexArray(e.DebugVao)
-	gl.BindBuffer(gl.ARRAY_BUFFER, e.DebugVbo)
-	gl.BufferData(gl.ARRAY_BUFFER, len(vertices)*4, gl.Ptr(vertices), gl.STATIC_DRAW)
-
-	gl.VertexAttribPointer(0, 3, gl.FLOAT, false, 5*4, gl.PtrOffset(0))
-	gl.EnableVertexAttribArray(0)
-	gl.VertexAttribPointer(1, 2, gl.FLOAT, false, 5*4, gl.PtrOffset(3*4))
-	gl.EnableVertexAttribArray(1)
 
 	e.Window.MakeContextCurrent()
 }

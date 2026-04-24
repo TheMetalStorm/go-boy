@@ -125,19 +125,6 @@ func (d *Debugger) RunEmulator() {
 
 			d.e.Window.SwapBuffers()
 
-			// Render debug window
-			if d.e.DebugWindow != nil {
-				d.e.DebugWindow.MakeContextCurrent()
-				gl.Clear(gl.COLOR_BUFFER_BIT)
-				d.RenderTileViewer()
-				gl.UseProgram(d.e.Program)
-				gl.BindVertexArray(d.e.DebugVao)
-				gl.BindTexture(gl.TEXTURE_2D, d.e.Ppu.TileViewerTex)
-				gl.DrawArrays(gl.TRIANGLES, 0, 6)
-				d.e.DebugWindow.SwapBuffers()
-				d.e.Window.MakeContextCurrent()
-			}
-
 		}
 
 	}
@@ -150,8 +137,10 @@ func (d *Debugger) RenderTileViewer() {
 
 func (d *Debugger) Render() {
 
-	// imgui.SetNextWindowPosV(imgui.Vec2{X: 0, Y: 0}, imgui.ConditionAlways, imgui.Vec2{X: 0, Y: 0})
-	// imgui.SetNextWindowSizeV(imgui.Vec2{X: 1200, Y: 900}, imgui.ConditionAlways)
+	imgui.Begin("Tile Viewer")
+	d.RenderTileViewer()
+	imgui.Image(imgui.TextureID(d.e.Ppu.TileViewerTex), imgui.Vec2{X: 16 * 8 * 4, Y: 24 * 8 * 4})
+	imgui.End()
 
 	imgui.Begin("GB Debugger")
 
@@ -220,6 +209,7 @@ func (d *Debugger) Render() {
 			imgui.Text(fmt.Sprintf("0xFFFF: %02x", d.e.Cpu.Memory.Ie))
 			imgui.EndTabItem()
 		}
+
 		if imgui.BeginTabItem("Game Code") {
 			d.RenderMemoryTable("Game Code", d.e.GetCurrentGame(), 0, true)
 			imgui.EndTabItem()
