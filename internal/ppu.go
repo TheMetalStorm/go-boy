@@ -166,6 +166,13 @@ func (p *Ppu) FillBackgroundMapData() {
 	//Render BG Tile Map onto Buffer
 }
 
+//TODO: instead of revers do this?
+// This is a quirk of Game Boy LCD hardware - bit 0 is actually the LEFTMOST pixel, not rightmost.
+// When iterating px = 0..7, you might be doing:
+// colorLsb = (byte >> px) & 1  // px=0 gets bit 0 (LEFT pixel on screen)
+// But since bit 0 = leftmost, you need:
+// colorLsb = (byte >> (7-px)) & 1  // px=0 gets bit 7 (RIGHT pixel on screen)
+
 func ReadTileAbs(tileNumber uint16, c *Cpu) Tile {
 	var tile Tile
 

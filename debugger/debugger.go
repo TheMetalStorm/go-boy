@@ -74,7 +74,7 @@ func (d *Debugger) RunEmulator() {
 
 	for !d.e.Window.ShouldClose() {
 
-		//		d.e.Window.MakeContextCurrent()
+		d.e.Window.MakeContextCurrent()
 		glfw.PollEvents()
 
 		if d.e.Io.WantTextInput() {
