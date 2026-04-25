@@ -279,7 +279,8 @@ func (e *Emulator) Restart() {
 	e.Cpu.Ppu = e.Ppu
 	e.Cpu.Memory.Ppu = e.Ppu
 
-	e.currentGame = internal.NewRom("./games/Dr.M.gb")
+	//e.currentGame = internal.NewRom("./games/Dr.M.gb")
+	e.currentGame = internal.NewRom("./games/Tetris.gb")
 
 	e.LoadRom(e.currentGame)
 }

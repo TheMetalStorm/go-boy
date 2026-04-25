@@ -2,6 +2,7 @@ package internal
 
 import (
 	"image/color"
+	"math/bits"
 
 	"github.com/go-gl/gl/v3.3-core/gl"
 )
@@ -29,7 +30,11 @@ type Ppu struct {
 	Frame          uint64
 }
 
-var TILE_DATA_START int = 0x8000
+type Tile struct {
+	Lines [8][2]uint8
+}
+
+var TILE_DATA_START = 0x8000
 var TILE_DATA_END int = 0x97FF
 var GB_WINDOW_WIDTH int = 160
 var GB_WINDOW_HEIGHT int = 144
@@ -151,19 +156,69 @@ func getTileColor(bits int) color.RGBA {
 	case 3:
 		return tileColor4
 	default:
-		return color.RGBA{255, 255, 0, 255}
+		return color.RGBA{255, 0, 0, 255}
 	}
+}
+
+func (p *Ppu) FillBackgroundMapData() {
+	// Get BG Tile Map
+
+	//Render BG Tile Map onto Buffer
+}
+
+func ReadTileAbs(tileNumber uint16, c *Cpu) Tile {
+	var tile Tile
+
+	for i := 0; i < 8; i++ {
+		leftPart, _ := c.Memory.ReadByteAtForced(uint16(TILE_DATA_START) + tileNumber*16 + uint16(i*2))
+		rightPart, _ := c.Memory.ReadByteAtForced(uint16(TILE_DATA_START) + tileNumber*16 + uint16(i*2+1))
+
+		tile.Lines[i] = [2]uint8{bits.Reverse8(leftPart), bits.Reverse8(rightPart)}
+
+	}
+
+	return tile
+}
+
+func ReadTile(tileDataOffset uint16, c *Cpu, isObject bool) Tile {
+
+	//TODO check if WORKS
+
+	var tileStart uint16
+	_ = tileStart
+	if isObject {
+		// Object
+		tileStart = 0x8000 + tileDataOffset
+	} else {
+		addressingMode := GetBit(c.Memory.Io.GetLCDC(), 4)
+		if addressingMode { // LCD.4 = 1
+			// same as Object
+			tileStart = 0x8000 + tileDataOffset
+		} else { // LCD.4 = 0
+			if tileDataOffset > 127 { //128-255 start at 0x8800
+				tileStart = 0x8800 + tileDataOffset
+			} else { //0-127 start at 0x9000
+				tileStart = 0x9000 + tileDataOffset
+			}
+		}
+	}
+	var tile Tile
+	for i := 0; i < 8; i++ {
+		leftPart, _ := c.Memory.ReadByteAt(tileStart + tileDataOffset + uint16(i*2))
+		rightPart, _ := c.Memory.ReadByteAt(tileStart + tileDataOffset + uint16(i*2+1))
+
+		tile.Lines[i] = [2]uint8{bits.Reverse8(leftPart), bits.Reverse8(rightPart)}
+	}
+	return tile
 }
 
 func (p *Ppu) FillTileViewerData() {
 	bufW := 16 * 8
 	for tileNum := 0; tileNum < 384; tileNum++ {
-		var lines [8]uint16
-		for i := 0; i < 8; i++ {
-			leftPart, _ := p.Cpu.Memory.ReadByteAtForced(uint16(TILE_DATA_START) + uint16(tileNum)*16 + uint16(i*2))
-			rightPart, _ := p.Cpu.Memory.ReadByteAtForced(uint16(TILE_DATA_START) + uint16(tileNum)*16 + uint16(i*2+1))
-			lines[i] = uint16(leftPart) | uint16(rightPart)<<8
-		}
+
+		tile := ReadTileAbs(uint16(tileNum), p.Cpu)
+
+		var lines = tile.Lines
 
 		tileX := tileNum % 16
 		tileY := tileNum / 16
@@ -173,10 +228,10 @@ func (p *Ppu) FillTileViewerData() {
 			for px := 0; px < 8; px++ {
 				colorLsb := 0
 				colorMsb := 0
-				if GetBit16(currentLine, uint8(px)) {
+				if GetBit(currentLine[0], uint8(px)) {
 					colorLsb = 1
 				}
-				if GetBit16(currentLine, uint8(8+px)) {
+				if GetBit(currentLine[1], uint8(px)) {
 					colorMsb = 1
 				}
 				colorBits := colorLsb | (colorMsb << 1)
@@ -188,22 +243,6 @@ func (p *Ppu) FillTileViewerData() {
 }
 
 func (p *Ppu) drawLine() {
-
-}
-
-func (p *Ppu) RenderBG() {
-	gl.BindTexture(gl.TEXTURE_2D, p.BackgroundTex)
-
-	gl.TexImage2D(
-		gl.TEXTURE_2D,
-		0,
-		gl.RGBA,
-		int32(BG_WINDOW_X_Y),
-		int32(BG_WINDOW_X_Y),
-		0,
-		gl.RGBA,
-		gl.UNSIGNED_BYTE,
-		gl.Ptr(p.backgroundBuf))
 
 }
 
@@ -222,11 +261,27 @@ func (p *Ppu) RenderTileViewer() {
 		gl.UNSIGNED_BYTE,
 		gl.Ptr(p.tileViewerBuf))
 }
+
+func (p *Ppu) RenderBackgroundMapViewer() {
+	p.FillBackgroundMapData()
+	gl.BindTexture(gl.TEXTURE_2D, p.BackgroundTex)
+
+	gl.TexImage2D(
+		gl.TEXTURE_2D,
+		0,
+		gl.RGBA,
+		int32(256),
+		int32(256),
+		0,
+		gl.RGBA,
+		gl.UNSIGNED_BYTE,
+		gl.Ptr(p.backgroundBuf))
+}
+
 func (p *Ppu) Render() {
 
 	//for now just render background
-	p.RenderBG()
-	return
+
 	// // Clear to black
 	// for i := range p.viewportBuf {
 	// 	p.viewportBuf[i] = color.RGBA{0, 0, 0, 255}

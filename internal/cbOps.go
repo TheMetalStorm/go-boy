@@ -13,7 +13,6 @@ func (cpu *Cpu) handleCB() (cycles uint64) {
 	case 0:
 		actualInstr := (data >> 3) & 0x1f
 		switch actualInstr {
-		//TODO implement all of these
 		case 0:
 			//rlc r8
 			return cpu.cbRlc(Reg8(operand))

@@ -135,11 +135,20 @@ func (d *Debugger) RenderTileViewer() {
 	d.e.Ppu.RenderTileViewer()
 }
 
+func (d *Debugger) RenderBackgroundMapViewer() {
+	d.e.Ppu.RenderBackgroundMapViewer()
+}
+
 func (d *Debugger) Render() {
 
 	imgui.Begin("Tile Viewer")
 	d.RenderTileViewer()
 	imgui.Image(imgui.TextureID(d.e.Ppu.TileViewerTex), imgui.Vec2{X: 16 * 8 * 4, Y: 24 * 8 * 4})
+	imgui.End()
+
+	imgui.Begin("Background Map Viewer")
+	d.RenderBackgroundMapViewer()
+	imgui.Image(imgui.TextureID(d.e.Ppu.BackgroundTex), imgui.Vec2{X: 16 * 8 * 4, Y: 24 * 8 * 4})
 	imgui.End()
 
 	imgui.Begin("GB Debugger")
