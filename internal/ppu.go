@@ -161,6 +161,46 @@ func getTileColor(bits int) color.RGBA {
 }
 
 func (p *Ppu) FillBackgroundMapData() {
+	var areaStart uint16
+	if !GetBit(p.Cpu.Memory.Io.GetLCDC(), 3) {
+		areaStart = 0x9800
+	} else {
+		areaStart = 0x9C00
+	}
+
+	var indices [1024]uint8
+	for i := 0; i < 1024; i++ {
+		idx, _ := p.Cpu.Memory.ReadByteAt(areaStart + uint16(i))
+		indices[i] = idx
+	}
+
+	bufW := 32 * 8
+
+	for i, tileInd := range indices {
+		tile := ReadTileForLayers(uint16(tileInd), p.Cpu)
+
+		var lines = tile.Lines
+
+		tileX := i % 32
+		tileY := i / 32
+
+		for py := 0; py < 8; py++ {
+			currentLine := lines[py]
+			for px := 0; px < 8; px++ {
+				colorLsb := 0
+				colorMsb := 0
+				if GetBit(currentLine[0], uint8(px)) {
+					colorLsb = 1
+				}
+				if GetBit(currentLine[1], uint8(px)) {
+					colorMsb = 1
+				}
+				colorBits := colorLsb | (colorMsb << 1)
+				bufIdx := (tileY*8+py)*bufW + (tileX*8 + px)
+				p.backgroundBuf[bufIdx] = getTileColor(colorBits)
+			}
+		}
+	}
 	// Get BG Tile Map
 
 	//Render BG Tile Map onto Buffer
@@ -173,17 +213,43 @@ func (p *Ppu) FillBackgroundMapData() {
 // But since bit 0 = leftmost, you need:
 // colorLsb = (byte >> (7-px)) & 1  // px=0 gets bit 7 (RIGHT pixel on screen)
 
-func ReadTileAbs(tileNumber uint16, c *Cpu) Tile {
+func ReadTileDataBypass(absTileNumber uint16, c *Cpu) Tile {
 	var tile Tile
 
 	for i := 0; i < 8; i++ {
-		leftPart, _ := c.Memory.ReadByteAtForced(uint16(TILE_DATA_START) + tileNumber*16 + uint16(i*2))
-		rightPart, _ := c.Memory.ReadByteAtForced(uint16(TILE_DATA_START) + tileNumber*16 + uint16(i*2+1))
+		leftPart, _ := c.Memory.ReadByteAtForced(uint16(TILE_DATA_START) + absTileNumber*16 + uint16(i*2))
+		rightPart, _ := c.Memory.ReadByteAtForced(uint16(TILE_DATA_START) + absTileNumber*16 + uint16(i*2+1))
 
 		tile.Lines[i] = [2]uint8{bits.Reverse8(leftPart), bits.Reverse8(rightPart)}
 
 	}
 
+	return tile
+}
+
+func ReadTileForLayers(relTileNumber uint16, c *Cpu) Tile {
+
+	var tileStart uint16
+
+	addressingMode := GetBit(c.Memory.Io.GetLCDC(), 4)
+	if addressingMode { // LCD.4 = 1
+		// same as Object
+		tileStart = 0x8000 + relTileNumber*16
+	} else { // LCD.4 = 0
+		if relTileNumber > 127 { //128-255 start at 0x8800
+			tileStart = 0x8800 + (relTileNumber-128)*16
+		} else { //0-127 start at 0x9000
+			tileStart = 0x9000 + relTileNumber*16
+		}
+	}
+
+	var tile Tile
+	for i := 0; i < 8; i++ {
+		leftPart, _ := c.Memory.ReadByteAtForced(tileStart + uint16(i*2))
+		rightPart, _ := c.Memory.ReadByteAtForced(tileStart + uint16(i*2+1))
+
+		tile.Lines[i] = [2]uint8{bits.Reverse8(leftPart), bits.Reverse8(rightPart)}
+	}
 	return tile
 }
 
@@ -223,7 +289,7 @@ func (p *Ppu) FillTileViewerData() {
 	bufW := 16 * 8
 	for tileNum := 0; tileNum < 384; tileNum++ {
 
-		tile := ReadTileAbs(uint16(tileNum), p.Cpu)
+		tile := ReadTileDataBypass(uint16(tileNum), p.Cpu)
 
 		var lines = tile.Lines
 
@@ -270,8 +336,14 @@ func (p *Ppu) RenderTileViewer() {
 }
 
 func (p *Ppu) RenderBackgroundMapViewer() {
+
 	p.FillBackgroundMapData()
+
 	gl.BindTexture(gl.TEXTURE_2D, p.BackgroundTex)
+
+	// if GetBit(p.Cpu.Memory.Io.GetLCDC(), 0) {
+	// 	gl.Clear
+	// }
 
 	gl.TexImage2D(
 		gl.TEXTURE_2D,

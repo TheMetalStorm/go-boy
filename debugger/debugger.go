@@ -148,7 +148,7 @@ func (d *Debugger) Render() {
 
 	imgui.Begin("Background Map Viewer")
 	d.RenderBackgroundMapViewer()
-	imgui.Image(imgui.TextureID(d.e.Ppu.BackgroundTex), imgui.Vec2{X: 16 * 8 * 4, Y: 24 * 8 * 4})
+	imgui.Image(imgui.TextureID(d.e.Ppu.BackgroundTex), imgui.Vec2{X: 32 * 8 * 3, Y: 32 * 8 * 3})
 	imgui.End()
 
 	imgui.Begin("GB Debugger")
