@@ -107,8 +107,8 @@ func (d *Debugger) RunEmulator() {
 			}
 		}
 
-		if d.e.DoRender {
-			gl.Clear(gl.COLOR_BUFFER_BIT)
+		// d.e.Cpu.Memory.Io.GetLY() == 144 fixes some timing in debug views
+		if d.e.Cpu.Memory.Io.GetLY() == 144 && d.e.DoRender {
 
 			d.e.DoRender = false
 

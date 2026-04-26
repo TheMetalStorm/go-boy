@@ -170,7 +170,7 @@ func (p *Ppu) FillWindowMapData() {
 
 	var indices [1024]uint8
 	for i := 0; i < 1024; i++ {
-		idx, _ := p.Cpu.Memory.ReadByteAt(areaStart + uint16(i))
+		idx, _ := p.Cpu.Memory.ReadByteAtForced(areaStart + uint16(i))
 		indices[i] = idx
 	}
 
@@ -362,8 +362,11 @@ func (p *Ppu) drawLine() {
 }
 
 func (p *Ppu) RenderTileViewer() {
-	p.FillTileViewerData()
 	gl.BindTexture(gl.TEXTURE_2D, p.TileViewerTex)
+
+	gl.Clear(gl.COLOR_BUFFER_BIT)
+
+	p.FillTileViewerData()
 
 	gl.TexImage2D(
 		gl.TEXTURE_2D,
@@ -378,10 +381,11 @@ func (p *Ppu) RenderTileViewer() {
 }
 
 func (p *Ppu) RenderWindowMapViewer() {
+	gl.BindTexture(gl.TEXTURE_2D, p.WindowTex)
+
+	gl.Clear(gl.COLOR_BUFFER_BIT)
 
 	p.FillWindowMapData()
-
-	gl.BindTexture(gl.TEXTURE_2D, p.WindowTex)
 
 	gl.TexImage2D(
 		gl.TEXTURE_2D,
@@ -396,10 +400,11 @@ func (p *Ppu) RenderWindowMapViewer() {
 }
 
 func (p *Ppu) RenderBackgroundMapViewer() {
+	gl.BindTexture(gl.TEXTURE_2D, p.BackgroundTex)
+
+	gl.Clear(gl.COLOR_BUFFER_BIT)
 
 	p.FillBackgroundMapData()
-
-	gl.BindTexture(gl.TEXTURE_2D, p.BackgroundTex)
 
 	gl.TexImage2D(
 		gl.TEXTURE_2D,
@@ -437,6 +442,7 @@ func (p *Ppu) Render() {
 	// p.Frame++
 
 	gl.BindTexture(gl.TEXTURE_2D, p.ViewPortTex)
+	gl.Clear(gl.COLOR_BUFFER_BIT)
 
 	gl.TexImage2D(
 		gl.TEXTURE_2D,
