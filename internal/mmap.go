@@ -10,7 +10,7 @@ type Mmap struct {
 	wram1 [0x1000]uint8 // 4 KiB Work RAM (WRAM)
 	wram2 [0x1000]uint8 // 4 KiB Work RAM (WRAM)
 
-	Echoram [0x1e00]uint8 // Echo Ram (mirror of C000–DDFF)
+	//Echoram [0x1e00]uint8 // Echo Ram (mirror of C000–DDFF)
 
 	Oam  [0xa0]uint8 //Object attribute memory (OAM)
 	nu   [0x60]uint8 //not usable
@@ -33,6 +33,11 @@ func (m *Mmap) SetValueForRom(address uint16, value uint8) {
 }
 
 func (m *Mmap) SetValue(address uint16, value uint8) {
+
+	//TODO: only in mbc0 afaik, so change when mbc implemented
+	if address < 0x8000 {
+		return // ROM is not writable
+	}
 
 	switch {
 	case address < 0x4000:
@@ -57,7 +62,13 @@ func (m *Mmap) SetValue(address uint16, value uint8) {
 		m.wram2[address-0xD000] = value
 
 	case address < 0xFE00:
-		m.Echoram[address-0xE000] = value
+		// Echoram is a mirror of C000–DDFF, so we write to both wram1 and wram2
+		actualAddress := address - 0xE000
+		if actualAddress < 0x1000 {
+			m.wram1[actualAddress] = value
+		} else {
+			m.wram2[actualAddress-0x1000] = value
+		}
 
 	case address < 0xFEA0:
 		if GetBit(m.Io.GetLCDC(), 7) && (m.Ppu.CurrentMode == MODE_2 || m.Ppu.CurrentMode == MODE_3) {
@@ -69,7 +80,8 @@ func (m *Mmap) SetValue(address uint16, value uint8) {
 		m.nu[address-0xFEA0] = value
 
 	case address < 0xFF80:
-		m.Io.Regs[address-0xFF00] = value
+		return
+		// m.Io.Regs[address-0xFF00] = value
 
 	case address < 0xFFFF:
 		m.Hram[address-0xFF80] = value
@@ -117,9 +129,17 @@ func (m *Mmap) Read16At(address uint16) (data uint16, numReadBytes uint16) {
 		return uint16(a1 | a2<<8), 2
 
 	case address < 0xFE00-1:
-		a1 := uint16(m.Echoram[address-0xe000])
-		a2 := uint16(m.Echoram[address-0xe000+1])
-		return uint16(a1 | a2<<8), 2
+
+		actualAddress := address - 0xE000
+		if actualAddress < 0x1000-1 {
+			a1 := uint16(m.wram1[actualAddress])
+			a2 := uint16(m.wram1[actualAddress+1])
+			return uint16(a1 | a2<<8), 2
+		} else {
+			a1 := uint16(m.wram2[actualAddress-0x1000])
+			a2 := uint16(m.wram2[actualAddress-0x1000+1])
+			return uint16(a1 | a2<<8), 2
+		}
 
 	case address < 0xFEA0-1:
 		if GetBit(m.Io.GetLCDC(), 7) && (m.Ppu.CurrentMode == MODE_2 || m.Ppu.CurrentMode == MODE_3) {
@@ -130,9 +150,7 @@ func (m *Mmap) Read16At(address uint16) (data uint16, numReadBytes uint16) {
 		return uint16(a1 | a2<<8), 2
 
 	case address < 0xFF00-1:
-		a1 := uint16(m.nu[address-0xFEA0])
-		a2 := uint16(m.nu[address-0xFEA0+1])
-		return uint16(a1 | a2<<8), 2
+		return 0, 1
 
 	case address < 0xFF80-1:
 		a1 := uint16(m.Io.Regs[address-0xFF00])
@@ -170,14 +188,21 @@ func (m *Mmap) ReadByteAtForced(address uint16) (val uint8, bytesRead uint16) {
 		return m.wram2[address-0xD000], 1
 
 	case address < 0xFE00:
-		return m.Echoram[address-0xE000], 1
+		// Echoram is a mirror of C000–DDFF, so we read from wram1 and wram2
+		actualAddress := address - 0xE000
+		if actualAddress < 0x1000 {
+			return m.wram1[actualAddress], 1
+		} else {
+			return m.wram2[actualAddress-0x1000], 1
+		}
 
 	case address < 0xFEA0:
 
 		return m.Oam[address-0xFE00], 1
 
 	case address < 0xFF00:
-		return m.nu[address-0xFEA0], 1
+		return 0, 1
+		// return m.nu[address-0xFEA0], 1
 
 	case address < 0xFF80:
 		return m.Io.Regs[address-0xFF00], 1
@@ -216,8 +241,12 @@ func (m *Mmap) ReadByteAt(address uint16) (val uint8, bytesRead uint16) {
 		return m.wram2[address-0xD000], 1
 
 	case address < 0xFE00:
-		return m.Echoram[address-0xE000], 1
-
+		actualAddress := address - 0xE000
+		if actualAddress < 0x1000 {
+			return m.wram1[actualAddress], 1
+		} else {
+			return m.wram2[actualAddress-0x1000], 1
+		}
 	case address < 0xFEA0:
 		if GetBit(m.Io.GetLCDC(), 7) && (m.Ppu.CurrentMode == MODE_2 || m.Ppu.CurrentMode == MODE_3) {
 			return 0xFF, 1
@@ -225,7 +254,8 @@ func (m *Mmap) ReadByteAt(address uint16) (val uint8, bytesRead uint16) {
 		return m.Oam[address-0xFE00], 1
 
 	case address < 0xFF00:
-		return m.nu[address-0xFEA0], 1
+		return 0, 1
+		// return m.nu[address-0xFEA0], 1
 
 	case address < 0xFF80:
 		return m.Io.Regs[address-0xFF00], 1
@@ -296,7 +326,9 @@ func (m *Mmap) GetWram2() []uint8 {
 }
 
 func (m *Mmap) GetEchoram() []uint8 {
-	return m.Echoram[:]
+	a := m.wram1[:]
+	b := m.wram2[0:0x0DFF]
+	return append(a, b...)
 }
 
 func (m *Mmap) GetOam() []uint8 {
