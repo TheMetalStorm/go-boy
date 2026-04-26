@@ -160,6 +160,50 @@ func getTileColor(bits int) color.RGBA {
 	}
 }
 
+func (p *Ppu) FillWindowMapData() {
+	var areaStart uint16
+	if !GetBit(p.Cpu.Memory.Io.GetLCDC(), 6) {
+		areaStart = 0x9800
+	} else {
+		areaStart = 0x9C00
+	}
+
+	var indices [1024]uint8
+	for i := 0; i < 1024; i++ {
+		idx, _ := p.Cpu.Memory.ReadByteAt(areaStart + uint16(i))
+		indices[i] = idx
+	}
+
+	bufW := 32 * 8
+
+	for i, tileInd := range indices {
+		tile := ReadTileForLayers(uint16(tileInd), p.Cpu)
+
+		var lines = tile.Lines
+
+		tileX := i % 32
+		tileY := i / 32
+
+		for py := 0; py < 8; py++ {
+			currentLine := lines[py]
+			for px := 0; px < 8; px++ {
+				colorLsb := 0
+				colorMsb := 0
+				if GetBit(currentLine[0], uint8(px)) {
+					colorLsb = 1
+				}
+				if GetBit(currentLine[1], uint8(px)) {
+					colorMsb = 1
+				}
+				colorBits := colorLsb | (colorMsb << 1)
+				bufIdx := (tileY*8+py)*bufW + (tileX*8 + px)
+				p.windowBuf[bufIdx] = getTileColor(colorBits)
+			}
+		}
+	}
+
+}
+
 func (p *Ppu) FillBackgroundMapData() {
 	var areaStart uint16
 	if !GetBit(p.Cpu.Memory.Io.GetLCDC(), 3) {
@@ -201,9 +245,7 @@ func (p *Ppu) FillBackgroundMapData() {
 			}
 		}
 	}
-	// Get BG Tile Map
 
-	//Render BG Tile Map onto Buffer
 }
 
 //TODO: instead of revers do this?
@@ -335,15 +377,29 @@ func (p *Ppu) RenderTileViewer() {
 		gl.Ptr(p.tileViewerBuf))
 }
 
+func (p *Ppu) RenderWindowMapViewer() {
+
+	p.FillWindowMapData()
+
+	gl.BindTexture(gl.TEXTURE_2D, p.WindowTex)
+
+	gl.TexImage2D(
+		gl.TEXTURE_2D,
+		0,
+		gl.RGBA,
+		int32(256),
+		int32(256),
+		0,
+		gl.RGBA,
+		gl.UNSIGNED_BYTE,
+		gl.Ptr(p.windowBuf))
+}
+
 func (p *Ppu) RenderBackgroundMapViewer() {
 
 	p.FillBackgroundMapData()
 
 	gl.BindTexture(gl.TEXTURE_2D, p.BackgroundTex)
-
-	// if GetBit(p.Cpu.Memory.Io.GetLCDC(), 0) {
-	// 	gl.Clear
-	// }
 
 	gl.TexImage2D(
 		gl.TEXTURE_2D,

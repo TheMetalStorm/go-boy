@@ -239,16 +239,16 @@ func (e *Emulator) SetupGL() {
 
 func (e *Emulator) SetupDebugTextures() {
 
-	gl.GenTextures(1, &e.Ppu.BackgroundTex)
-	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.BackgroundTex)
+	gl.GenTextures(1, &e.Ppu.WindowTex)
+	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.WindowTex)
 
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 
-	gl.GenTextures(1, &e.Ppu.WindowTex)
-	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.WindowTex)
+	gl.GenTextures(1, &e.Ppu.BackgroundTex)
+	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.BackgroundTex)
 
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
@@ -279,8 +279,8 @@ func (e *Emulator) Restart() {
 	e.Cpu.Ppu = e.Ppu
 	e.Cpu.Memory.Ppu = e.Ppu
 
-	//e.currentGame = internal.NewRom("./games/Dr.M.gb")
-	e.currentGame = internal.NewRom("./games/Tetris.gb")
+	e.currentGame = internal.NewRom("./games/Dr.M.gb")
+	//e.currentGame = internal.NewRom("./games/Tetris.gb")
 
 	e.LoadRom(e.currentGame)
 }
