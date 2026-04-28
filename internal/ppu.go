@@ -103,10 +103,11 @@ func (p *Ppu) Step(ranMCyclesThisStep uint64) {
 			p.CurrentDot = 0
 			p.Cpu.Memory.Io.SetLY(p.Cpu.Memory.Io.GetLY() + 1)
 
+			// TODO: first we implement a simple version where we just render the whole screen at once
 			//draw current line!
-			if p.Cpu.Memory.Io.GetLY() < 144 {
-				p.drawLine()
-			}
+			// if p.Cpu.Memory.Io.GetLY() < 144 {
+			// 	p.drawLine()
+			// }
 
 			if p.Cpu.Memory.Io.GetLY() == 144 {
 
@@ -381,11 +382,14 @@ func (p *Ppu) RenderTileViewer() {
 }
 
 func (p *Ppu) RenderWindowMapViewer() {
+
 	gl.BindTexture(gl.TEXTURE_2D, p.WindowTex)
 
 	gl.Clear(gl.COLOR_BUFFER_BIT)
 
-	p.FillWindowMapData()
+	if GetBit(p.Cpu.Memory.Io.GetLCDC(), 5) {
+		p.FillWindowMapData()
+	}
 
 	gl.TexImage2D(
 		gl.TEXTURE_2D,

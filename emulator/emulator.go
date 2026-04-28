@@ -1,5 +1,7 @@
 // Aims to be M-Cycle Accurate
 
+// TODO: to get tetris to work we have to have controls. Currently probably all buttons pressed which triggers automatic restart in tetris (https://emudev.de/gameboy-emulator/starting-the-first-games/)
+
 package emulator
 
 import (
@@ -69,8 +71,8 @@ type Emulator struct {
 	Ppu         *Ppu
 	currentGame *Rom
 
-	DoRender            bool
-	ranMCyclesThisFrame uint64
+	DelegateDrawToDebugger bool
+	ranMCyclesThisFrame    uint64
 
 	Window   *glfw.Window
 	context  *imgui.Context
@@ -83,7 +85,7 @@ type Emulator struct {
 
 func NewEmulator() *Emulator {
 	emu := &Emulator{}
-	emu.DoRender = true
+	emu.DelegateDrawToDebugger = true
 	emu.Cpu = internal.NewCpu()
 	emu.Ppu = internal.NewPpu(ScreenSizeMultiplier)
 
@@ -344,7 +346,7 @@ func (e *Emulator) Render() {
 		e.Window.SwapBuffers()
 	} else {
 		//delegate rendering to Debugger to handle ALL Graphics Operation in a single place
-		e.DoRender = true
+		e.DelegateDrawToDebugger = true
 
 	}
 }
@@ -370,8 +372,10 @@ func (e *Emulator) Step() {
 
 }
 
+// TODO: this works for rendering all at once, but we want to eventually move towards rendering line by line
+// For debug stuff we might want to render the whole screen at once, d.render can check if LY is 144 and if so render the whole screen at once, otherwise render line by line
 func (e *Emulator) ShouldRender() bool {
-	return e.ranMCyclesThisFrame >= MAX_CYCLES_PER_FRAME
+	return e.ranMCyclesThisFrame >= MAX_CYCLES_PER_FRAME && e.Cpu.Memory.Io.GetLY() == 144
 }
 
 func (e *Emulator) FinishFrame() {

@@ -97,38 +97,40 @@ func (d *Debugger) RunEmulator() {
 			if d.doStep {
 				d.lastBPHit = -1
 				d.e.Step()
-				d.e.DoRender = true
+				d.e.DelegateDrawToDebugger = true
 				d.doStep = false
 			}
 			if d.doFastStep {
 				d.lastBPHit = -1
 				d.e.Step()
-				d.e.DoRender = true
+				d.e.DelegateDrawToDebugger = true
 			}
 		}
-
-		// d.e.Cpu.Memory.Io.GetLY() == 144 fixes some timing in debug views
-		if d.e.Cpu.Memory.Io.GetLY() == 144 && d.e.DoRender {
-
-			d.e.DoRender = false
-
-			d.e.Ppu.Render()
-
-			gl.UseProgram(d.e.Program)
-			gl.BindVertexArray(d.e.Vao)
-			gl.DrawArrays(gl.TRIANGLES, 0, 6)
-
-			d.e.Impl.NewFrame()
-			d.Render()
-			imgui.Render()
-			d.e.Impl.Render(imgui.RenderedDrawData())
-
-			d.e.Window.SwapBuffers()
-
-		}
+		d.Render()
 
 	}
 
+}
+
+func (d *Debugger) Render() {
+	if d.e.DelegateDrawToDebugger {
+
+		d.e.DelegateDrawToDebugger = false
+
+		d.e.Ppu.Render()
+
+		gl.UseProgram(d.e.Program)
+		gl.BindVertexArray(d.e.Vao)
+		gl.DrawArrays(gl.TRIANGLES, 0, 6)
+
+		d.e.Impl.NewFrame()
+		d.RenderDebugger()
+		imgui.Render()
+		d.e.Impl.Render(imgui.RenderedDrawData())
+
+		d.e.Window.SwapBuffers()
+
+	}
 }
 
 func (d *Debugger) RenderTileViewer() {
@@ -143,7 +145,7 @@ func (d *Debugger) RenderWindowMapViewer() {
 	d.e.Ppu.RenderWindowMapViewer()
 }
 
-func (d *Debugger) Render() {
+func (d *Debugger) RenderDebugger() {
 
 	imgui.Begin("VRAM")
 	if imgui.BeginTabBar("View ") {
@@ -269,7 +271,7 @@ func (d *Debugger) debugKeyCallback(w *glfw.Window, key glfw.Key, scancode int, 
 		if action == glfw.Press {
 			d.autorun = false
 			d.e.Restart()
-			d.e.DoRender = true
+			d.e.DelegateDrawToDebugger = true
 		}
 	}
 
