@@ -145,10 +145,14 @@ func (d *Debugger) RenderWindowMapViewer() {
 	d.e.Ppu.RenderWindowMapViewer()
 }
 
+func (d *Debugger) RenderObjOverview() {
+	d.e.Ppu.RenderObjOverview()
+}
+
 func (d *Debugger) RenderDebugger() {
 
 	imgui.Begin("VRAM")
-	if imgui.BeginTabBar("View ") {
+	if imgui.BeginTabBar("Viewers") {
 		if imgui.BeginTabItem("TileViewer") {
 			d.RenderTileViewer()
 			imgui.Image(imgui.TextureID(d.e.Ppu.TileViewerTex), imgui.Vec2{X: 16 * 8 * 4, Y: 24 * 8 * 4})
@@ -162,6 +166,11 @@ func (d *Debugger) RenderDebugger() {
 		if imgui.BeginTabItem("Window Map") {
 			d.RenderWindowMapViewer()
 			imgui.Image(imgui.TextureID(d.e.Ppu.WindowTex), imgui.Vec2{X: 32 * 8 * 3, Y: 32 * 8 * 3})
+			imgui.EndTabItem()
+		}
+		if imgui.BeginTabItem("Obj Overview") {
+			d.RenderObjOverview()
+			imgui.Image(imgui.TextureID(d.e.Ppu.ObjOverviewTex), imgui.Vec2{X: 4 * 8 * 5, Y: 10 * 16 * 5})
 			imgui.EndTabItem()
 		}
 	}

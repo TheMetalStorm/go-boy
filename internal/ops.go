@@ -1087,12 +1087,6 @@ func (cpu *Cpu) call16ImmIf(cond bool) (cycles uint64) {
 		//instruction (which was just pushed) and moving it to the Pcpu.
 
 		cpu.PC = newPCAddr
-		// The lower-order byte of a16 is placed in byte 2 of the object code, and the higher-order byte is placed in byte 3.
-		newPCAddrHigher := GetHigher8(cpu.PC)
-		newPCAddrLower := GetLower8(cpu.PC)
-		cpu.Memory.Oam[2] = newPCAddrLower
-		cpu.Memory.Oam[3] = newPCAddrHigher
-
 		return 6
 	} else {
 		cpu.PC += 3

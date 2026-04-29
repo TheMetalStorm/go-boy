@@ -11,15 +11,17 @@ type Ppu struct {
 	screenMultiplier int
 	running          bool
 
-	ViewPortTex   uint32
-	BackgroundTex uint32
-	WindowTex     uint32
-	TileViewerTex uint32
+	ViewPortTex    uint32
+	BackgroundTex  uint32
+	WindowTex      uint32
+	TileViewerTex  uint32
+	ObjOverviewTex uint32
 
-	viewportBuf   []color.RGBA
-	backgroundBuf []color.RGBA
-	windowBuf     []color.RGBA
-	tileViewerBuf []color.RGBA
+	viewportBuf    []color.RGBA
+	backgroundBuf  []color.RGBA
+	windowBuf      []color.RGBA
+	tileViewerBuf  []color.RGBA
+	objOverviewBuf []color.RGBA
 
 	CurrentMode PpuMode
 	CurrentDot  uint64
@@ -34,11 +36,19 @@ type Tile struct {
 	Lines [8][2]uint8
 }
 
+type Object struct {
+	yPos       uint8
+	xPos       uint8
+	tileInd    uint8
+	attributes uint8
+}
+
 var TILE_DATA_START = 0x8000
 var TILE_DATA_END int = 0x97FF
 var GB_WINDOW_WIDTH int = 160
 var GB_WINDOW_HEIGHT int = 144
 
+const TILE_X_Y int = 8
 const BG_WINDOW_X_Y int = 256
 
 var quadVAO uint32
@@ -55,7 +65,9 @@ func NewPpu(screenMultiplier int) *Ppu {
 
 	ppu.windowBuf = make([]color.RGBA, BG_WINDOW_X_Y*BG_WINDOW_X_Y)
 
-	ppu.tileViewerBuf = make([]color.RGBA, 16*8*24*8)
+	ppu.objOverviewBuf = make([]color.RGBA, 4*TILE_X_Y*10*16)
+
+	ppu.tileViewerBuf = make([]color.RGBA, 16*TILE_X_Y*24*TILE_X_Y)
 
 	return ppu
 }
@@ -147,6 +159,8 @@ var tileColor3 = color.RGBA{0x55, 0x55, 0x55, 0xFF}
 var tileColor4 = color.RGBA{0x00, 0x00, 0x00, 0xFF}
 
 func getTileColor(bits int) color.RGBA {
+	// TODO: implement palette selection
+	// TODO: when obj, some bits are transparent
 	switch bits {
 	case 0:
 		return tileColor1
@@ -271,7 +285,6 @@ func ReadTileDataBypass(absTileNumber uint16, c *Cpu) Tile {
 }
 
 func ReadTileForLayers(relTileNumber uint16, c *Cpu) Tile {
-
 	var tileStart uint16
 
 	addressingMode := GetBit(c.Memory.Io.GetLCDC(), 4)
@@ -285,6 +298,19 @@ func ReadTileForLayers(relTileNumber uint16, c *Cpu) Tile {
 			tileStart = 0x9000 + relTileNumber*16
 		}
 	}
+
+	var tile Tile
+	for i := 0; i < 8; i++ {
+		leftPart, _ := c.Memory.ReadByteAtForced(tileStart + uint16(i*2))
+		rightPart, _ := c.Memory.ReadByteAtForced(tileStart + uint16(i*2+1))
+
+		tile.Lines[i] = [2]uint8{bits.Reverse8(leftPart), bits.Reverse8(rightPart)}
+	}
+	return tile
+}
+
+func ReadTileForObjects(relTileNumber uint16, c *Cpu) Tile {
+	var tileStart uint16 = 0x8000 + relTileNumber*16
 
 	var tile Tile
 	for i := 0; i < 8; i++ {
@@ -362,6 +388,95 @@ func (p *Ppu) drawLine() {
 
 }
 
+func (p *Ppu) RenderObjOverview() {
+
+	gl.BindTexture(gl.TEXTURE_2D, p.ObjOverviewTex)
+
+	gl.Clear(gl.COLOR_BUFFER_BIT)
+
+	// if GetBit(p.Cpu.Memory.Io.GetLCDC(), 1) {
+	p.FillObjOverviewData()
+	// }
+
+	gl.TexImage2D(
+		gl.TEXTURE_2D,
+		0,
+		gl.RGBA,
+		int32(4*8),
+		int32(10*16),
+		0,
+		gl.RGBA,
+		gl.UNSIGNED_BYTE,
+		gl.Ptr(p.objOverviewBuf))
+}
+
+func (p *Ppu) FillObjOverviewData() {
+	isY16 := GetBit(p.Cpu.Memory.Io.GetLCDC(), 2) //0=8x8, 1=8x16
+	var objYSize uint8 = 8
+	if isY16 {
+		objYSize = 16
+	}
+
+	for i := 0; i < 40; i++ {
+		oamBase := 0xFE00 + uint16(i*4)
+		yPos, _ := p.Cpu.Memory.ReadByteAt(oamBase)
+		xPos, _ := p.Cpu.Memory.ReadByteAt(oamBase + 1)
+		tileInd, _ := p.Cpu.Memory.ReadByteAt(oamBase + 2)
+		attributes, _ := p.Cpu.Memory.ReadByteAt(oamBase + 3)
+
+		obj := Object{
+			yPos:       yPos,
+			xPos:       xPos,
+			tileInd:    tileInd,
+			attributes: attributes,
+		}
+
+		tile := ReadTileForObjects(uint16(obj.tileInd), p.Cpu)
+		var tile2 Tile
+		if isY16 {
+			tile2 = ReadTileForObjects(uint16(obj.tileInd+16), p.Cpu)
+		}
+
+		// TODO: implement attributes:
+		// Priority : 0 = No, 1 = BG and Window color indices 1–3 are drawn over this OBJ
+		// Y flip: 0 = Normal, 1 = Entire OBJ is vertically mirrored
+		// X flip: 0 = Normal, 1 = Entire OBJ is horizontally mirrored
+		// Ignore Priority for now since this is debug view
+
+		var lines = tile.Lines
+		var lines2 = tile2.Lines
+
+		tileX := i % 4
+		tileY := i / 10
+
+		bufW := 4 * 8
+
+		for py := 0; py < int(objYSize); py++ {
+			var currentLine [2]uint8
+			if py >= 8 {
+				currentLine = lines2[py-8]
+			} else {
+				currentLine = lines[py]
+			}
+			for px := 0; px < 8; px++ {
+				colorLsb := 0
+				colorMsb := 0
+				if GetBit(currentLine[0], uint8(px)) {
+					colorLsb = 1
+				}
+				if GetBit(currentLine[1], uint8(px)) {
+					colorMsb = 1
+				}
+				colorBits := colorLsb | (colorMsb << 1)
+				bufIdx := (tileY*16+py)*bufW + (tileX*8 + px)
+				p.objOverviewBuf[bufIdx] = getTileColor(colorBits)
+			}
+		}
+	}
+
+	// render overview of sprites in objOverviewBuf, maybe 4 sprites per tile, with some indication of priority and palette?
+}
+
 func (p *Ppu) RenderTileViewer() {
 	gl.BindTexture(gl.TEXTURE_2D, p.TileViewerTex)
 
@@ -387,7 +502,7 @@ func (p *Ppu) RenderWindowMapViewer() {
 
 	gl.Clear(gl.COLOR_BUFFER_BIT)
 
-	if GetBit(p.Cpu.Memory.Io.GetLCDC(), 5) {
+	if GetBit(p.Cpu.Memory.Io.GetLCDC(), 5) { //&& GetBit(p.Cpu.Memory.Io.GetLCDC(), 0) {
 		p.FillWindowMapData()
 	}
 
@@ -408,7 +523,9 @@ func (p *Ppu) RenderBackgroundMapViewer() {
 
 	gl.Clear(gl.COLOR_BUFFER_BIT)
 
+	// if GetBit(p.Cpu.Memory.Io.GetLCDC(), 0) {
 	p.FillBackgroundMapData()
+	// }
 
 	gl.TexImage2D(
 		gl.TEXTURE_2D,
