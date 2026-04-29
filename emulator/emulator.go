@@ -81,6 +81,8 @@ type Emulator struct {
 	Program  uint32
 
 	Io imgui.IO
+
+	updatedThisFrame bool
 }
 
 func NewEmulator() *Emulator {
@@ -284,7 +286,7 @@ func (e *Emulator) Restart() {
 	e.Cpu.Restart()
 	e.Ppu.Restart(ScreenSizeMultiplier)
 	e.ranMCyclesThisFrame = 0
-
+	e.updatedThisFrame = false
 	e.Ppu.Cpu = e.Cpu
 	e.Cpu.Ppu = e.Ppu
 	e.Cpu.Memory.Ppu = e.Ppu
@@ -355,8 +357,8 @@ func (e *Emulator) Render() {
 	} else {
 		//delegate rendering to Debugger to handle ALL Graphics Operation in a single place
 		e.DelegateDrawToDebugger = true
-
 	}
+	e.updatedThisFrame = true
 }
 
 func (e *Emulator) Step() {
@@ -375,20 +377,19 @@ func (e *Emulator) Step() {
 
 	if e.ShouldRender() {
 		e.Render()
-		e.FinishFrame()
 	}
 
+	if e.ranMCyclesThisFrame >= MAX_CYCLES_PER_FRAME {
+		time.Sleep(time.Second / 60)
+		e.updatedThisFrame = false
+		e.ranMCyclesThisFrame = 0
+	}
 }
 
 // TODO: this works for rendering all at once, but we want to eventually move towards rendering line by line
 // For debug stuff we might want to render the whole screen at once, d.render can check if LY is 144 and if so render the whole screen at once, otherwise render line by line
 func (e *Emulator) ShouldRender() bool {
-	return e.ranMCyclesThisFrame >= MAX_CYCLES_PER_FRAME && e.Cpu.Memory.Io.GetLY() == 144
-}
-
-func (e *Emulator) FinishFrame() {
-	e.ranMCyclesThisFrame = 0
-	time.Sleep(time.Second / 60)
+	return e.Cpu.Memory.Io.GetLY() == 144 && !e.updatedThisFrame
 }
 
 func (e *Emulator) handleInterrupts() uint64 {

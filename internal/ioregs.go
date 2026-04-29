@@ -40,7 +40,28 @@ func (i *Ioregs) GetJOYP() uint8 {
 	return i.Regs[0x00]
 }
 
+func (i *Ioregs) HandleStat(value uint8) {
+	currentSTAT := i.Regs[0x41]
+
+	// 1. Keep the current read-only bits (0-2)
+	readOnlyBits := currentSTAT & 0x07
+
+	// 2. Take the new interrupt bits from the 'value' (3-6)
+	writableBits := value & 0x78
+
+	// 3. Set bit 7 to 1 (standard for DMG hardware)
+	const bit7 = 0x80
+
+	// Combine them back together
+	i.Regs[0x41] = bit7 | writableBits | readOnlyBits
+}
 func (i *Ioregs) SetAtAdress(add uint16, val uint8) {
+
+	if add == 0x41 {
+		i.HandleStat(val)
+		return
+	}
+
 	i.Regs[add] = val
 }
 

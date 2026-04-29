@@ -71,17 +71,20 @@ func (m *Mmap) SetValue(address uint16, value uint8) {
 		}
 
 	case address < 0xFEA0:
-		if GetBit(m.Io.GetLCDC(), 7) && (m.Ppu.CurrentMode == MODE_2 || m.Ppu.CurrentMode == MODE_3) {
-			return
+
+		if m.Ppu.CurrentMode == MODE_0 || m.Ppu.CurrentMode == MODE_1 { // OAM is not writable in modes 2 and 3
+
+			m.Oam[address-0xFE00] = value
+
+		} else if !GetBit(m.Io.GetLCDC(), 7) { // OAM is not writable if LCD is on
+			m.Oam[address-0xFE00] = value
 		}
-		m.Oam[address-0xFE00] = value
 
 	case address < 0xFF00:
 		m.nu[address-0xFEA0] = value
 
 	case address < 0xFF80:
-		return
-		// m.Io.Regs[address-0xFF00] = value
+		m.Io.Regs[address-0xFF00] = value
 
 	case address < 0xFFFF:
 		m.Hram[address-0xFF80] = value
@@ -142,12 +145,18 @@ func (m *Mmap) Read16At(address uint16) (data uint16, numReadBytes uint16) {
 		}
 
 	case address < 0xFEA0-1:
-		if GetBit(m.Io.GetLCDC(), 7) && (m.Ppu.CurrentMode == MODE_2 || m.Ppu.CurrentMode == MODE_3) {
-			return 0xFF, 1
+		if m.Ppu.CurrentMode == MODE_0 || m.Ppu.CurrentMode == MODE_1 { // OAM is not writable in modes 2 and 3
+
+			a1 := uint16(m.Oam[address-0xFE00])
+			a2 := uint16(m.Oam[address-0xFE00+1])
+			return uint16(a1 | a2<<8), 2
+
+		} else if !GetBit(m.Io.GetLCDC(), 7) { // even if in mode 2 or 3, OAM is writable if LCD is off
+			a1 := uint16(m.Oam[address-0xFE00])
+			a2 := uint16(m.Oam[address-0xFE00+1])
+			return uint16(a1 | a2<<8), 2
 		}
-		a1 := uint16(m.Oam[address-0xFE00])
-		a2 := uint16(m.Oam[address-0xFE00+1])
-		return uint16(a1 | a2<<8), 2
+		return 0xFF, 1
 
 	case address < 0xFF00-1:
 		return 0, 1
@@ -248,10 +257,15 @@ func (m *Mmap) ReadByteAt(address uint16) (val uint8, bytesRead uint16) {
 			return m.wram2[actualAddress-0x1000], 1
 		}
 	case address < 0xFEA0:
-		if GetBit(m.Io.GetLCDC(), 7) && (m.Ppu.CurrentMode == MODE_2 || m.Ppu.CurrentMode == MODE_3) {
-			return 0xFF, 1
+		if m.Ppu.CurrentMode == MODE_0 || m.Ppu.CurrentMode == MODE_1 { // OAM is not writable in modes 2 and 3
+
+			return m.Oam[address-0xFE00], 1
+
+		} else if !GetBit(m.Io.GetLCDC(), 7) { // even if in mode 2 or 3, OAM is writable if LCD is off
+			return m.Oam[address-0xFE00], 1
+
 		}
-		return m.Oam[address-0xFE00], 1
+		return 0xFF, 1
 
 	case address < 0xFF00:
 		return 0, 1
