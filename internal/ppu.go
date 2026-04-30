@@ -36,6 +36,21 @@ type Tile struct {
 	Lines [8][2]uint8
 }
 
+// Flip in hardware later? - Texture
+func (t *Tile) FlipY() {
+	for i := 0; i < len(t.Lines)/2; i++ {
+		j := len(t.Lines) - 1 - i
+		t.Lines[i], t.Lines[j] = t.Lines[j], t.Lines[i]
+	}
+}
+
+func (t *Tile) FlipX() {
+	for i := 0; i < len(t.Lines); i++ {
+		t.Lines[i][0] = bits.Reverse8(t.Lines[i][0])
+		t.Lines[i][1] = bits.Reverse8(t.Lines[i][1])
+	}
+}
+
 type Object struct {
 	yPos       uint8
 	xPos       uint8
@@ -65,7 +80,7 @@ func NewPpu(screenMultiplier int) *Ppu {
 
 	ppu.windowBuf = make([]color.RGBA, BG_WINDOW_X_Y*BG_WINDOW_X_Y)
 
-	ppu.objOverviewBuf = make([]color.RGBA, 4*TILE_X_Y*10*16)
+	ppu.objOverviewBuf = make([]color.RGBA, 8*TILE_X_Y*10*16)
 
 	ppu.tileViewerBuf = make([]color.RGBA, 16*TILE_X_Y*24*TILE_X_Y)
 
@@ -402,27 +417,29 @@ func (p *Ppu) RenderObjOverview() {
 		gl.TEXTURE_2D,
 		0,
 		gl.RGBA,
-		int32(4*8),
-		int32(10*16),
+		int32(8*8),
+		int32(5*16),
 		0,
 		gl.RGBA,
 		gl.UNSIGNED_BYTE,
 		gl.Ptr(p.objOverviewBuf))
 }
 
+var BitMask = [...]uint8{0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80}
+
 func (p *Ppu) FillObjOverviewData() {
 	isY16 := GetBit(p.Cpu.Memory.Io.GetLCDC(), 2) //0=8x8, 1=8x16
-	var objYSize uint8 = 8
-	if isY16 {
-		objYSize = 16
-	}
+	// var objYSize uint8 = 8
+	// if isY16 {
+	// 	objYSize = 16
+	// }
 
 	for i := 0; i < 40; i++ {
 		oamBase := 0xFE00 + uint16(i*4)
-		yPos, _ := p.Cpu.Memory.ReadByteAt(oamBase)
-		xPos, _ := p.Cpu.Memory.ReadByteAt(oamBase + 1)
-		tileInd, _ := p.Cpu.Memory.ReadByteAt(oamBase + 2)
-		attributes, _ := p.Cpu.Memory.ReadByteAt(oamBase + 3)
+		yPos, _ := p.Cpu.Memory.ReadByteAtForced(oamBase)
+		xPos, _ := p.Cpu.Memory.ReadByteAtForced(oamBase + 1)
+		tileInd, _ := p.Cpu.Memory.ReadByteAtForced(oamBase + 2)
+		attributes, _ := p.Cpu.Memory.ReadByteAtForced(oamBase + 3)
 
 		obj := Object{
 			yPos:       yPos,
@@ -433,8 +450,23 @@ func (p *Ppu) FillObjOverviewData() {
 
 		tile := ReadTileForObjects(uint16(obj.tileInd), p.Cpu)
 		var tile2 Tile
+
 		if isY16 {
 			tile2 = ReadTileForObjects(uint16(obj.tileInd+16), p.Cpu)
+		}
+
+		if GetBit(attributes, 6) {
+			tile.FlipY()
+			if isY16 {
+				tile2.FlipY()
+				tile2, tile = tile, tile2
+			}
+		}
+		if GetBit(attributes, 5) {
+			tile.FlipX()
+			if isY16 {
+				tile2.FlipX()
+			}
 		}
 
 		// TODO: implement attributes:
@@ -446,12 +478,12 @@ func (p *Ppu) FillObjOverviewData() {
 		var lines = tile.Lines
 		var lines2 = tile2.Lines
 
-		tileX := i % 4
-		tileY := i / 10
+		tileX := i % 8
+		tileY := i / 8
 
-		bufW := 4 * 8
+		bufW := 8 * 8
 
-		for py := 0; py < int(objYSize); py++ {
+		for py := 0; py < 16; py++ {
 			var currentLine [2]uint8
 			if py >= 8 {
 				currentLine = lines2[py-8]

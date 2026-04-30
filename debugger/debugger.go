@@ -170,7 +170,7 @@ func (d *Debugger) RenderDebugger() {
 		}
 		if imgui.BeginTabItem("Obj Overview") {
 			d.RenderObjOverview()
-			imgui.Image(imgui.TextureID(d.e.Ppu.ObjOverviewTex), imgui.Vec2{X: 4 * 8 * 5, Y: 10 * 16 * 5})
+			imgui.Image(imgui.TextureID(d.e.Ppu.ObjOverviewTex), imgui.Vec2{X: 8 * 8 * 5, Y: 5 * 16 * 5})
 			imgui.EndTabItem()
 		}
 	}

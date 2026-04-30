@@ -39,6 +39,18 @@ func (m *Mmap) SetValue(address uint16, value uint8) {
 		return // ROM is not writable
 	}
 
+	// OAM DMA transfer
+	// Source:      $XX00-$XX9F   ;XX = $00 to $DF
+	// Destination: $FE00-$FE9F
+
+	if address == 0xFF46 {
+		sourceStartAddr := uint16(value) << 8
+		for i := range 0x9f {
+			cpy, _ := m.ReadByteAt(sourceStartAddr + uint16(i))
+			m.SetValue(0xFE00+uint16(i), cpy)
+		}
+	}
+
 	switch {
 	case address < 0x4000:
 		m.bank0[address] = value
