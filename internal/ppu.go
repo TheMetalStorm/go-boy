@@ -235,6 +235,8 @@ func (p *Ppu) FillWindowMapData() {
 }
 
 func (p *Ppu) FillBackgroundMapData() {
+
+	clear(p.backgroundBuf)
 	var areaStart uint16
 	if !GetBit(p.Cpu.Memory.Io.GetLCDC(), 3) {
 		areaStart = 0x9800
@@ -573,30 +575,34 @@ func (p *Ppu) RenderBackgroundMapViewer() {
 
 func (p *Ppu) Render() {
 
-	//for now just render background
+	//DEBUG TIME
+	// gl.BindTexture(gl.TEXTURE_2D, p.BackgroundTex)
+	// gl.Clear(gl.COLOR_BUFFER_BIT)
+	// p.FillBackgroundMapData()
 
-	// // Clear to black
-	// for i := range p.viewportBuf {
-	// 	p.viewportBuf[i] = color.RGBA{0, 0, 0, 255}
-	// }
+	// gl.TexImage2D(
+	// 	gl.TEXTURE_2D,
+	// 	0,
+	// 	gl.RGBA,
+	// 	int32(256),
+	// 	int32(256),
+	// 	0,
+	// 	gl.RGBA,
+	// 	gl.UNSIGNED_BYTE,
+	// 	gl.Ptr(p.backgroundBuf))
 
-	// // Moving box
-	// boxW, boxH := 20, 20
-	// speed := 2
-	// x := int(p.Frame*uint64(speed)) % (GB_WINDOW_WIDTH - boxW)
-	// y := int(p.Frame*uint64(speed)) % (GB_WINDOW_HEIGHT - boxH)
+	//Fill BG
+	p.FillBackgroundMapData()
 
-	// for py := y; py < y+boxH; py++ {
-	// 	for px := x; px < x+boxW; px++ {
-	// 		p.viewportBuf[py*GB_WINDOW_WIDTH+px] = color.RGBA{255, 0, 0, 255}
-	// 	}
-	// }
-
-	// p.Frame++
+	//probably faster way to to do this in gpu but this is not final way of rendering anyway
+	subImage := extractRect(p.backgroundBuf,
+		int(p.Cpu.Memory.Io.GetSCX()),
+		int(p.Cpu.Memory.Io.GetSCY()),
+		GB_WINDOW_WIDTH,
+		GB_WINDOW_HEIGHT,
+		256)
 
 	gl.BindTexture(gl.TEXTURE_2D, p.ViewPortTex)
-	gl.Clear(gl.COLOR_BUFFER_BIT)
-
 	gl.TexImage2D(
 		gl.TEXTURE_2D,
 		0,
@@ -606,7 +612,26 @@ func (p *Ppu) Render() {
 		0,
 		gl.RGBA,
 		gl.UNSIGNED_BYTE,
-		gl.Ptr(p.viewportBuf))
+		gl.Ptr(subImage))
+
+}
+
+func extractRect(src []color.RGBA, x, y, w, h, stride int) []color.RGBA {
+	dest := make([]color.RGBA, w*h)
+	for cH := 0; cH < h; cH++ {
+		srcY := y*stride + cH*stride
+		for cW := 0; cW < w; cW++ {
+			srcX := x + cW
+			destIdx := cH*w + cW
+			srcIdx := srcY + srcX
+			dest[destIdx] = src[srcIdx]
+			// srcIdx := (y+cH)*stride + (x + cW)
+			// destIdx := (cH*w + cW)
+			// dest[destIdx] = src[srcIdx]
+
+		}
+	}
+	return dest
 }
 
 func (p *Ppu) GetTexture() uint32 {

@@ -80,6 +80,8 @@ type Emulator struct {
 	Vao, vbo uint32
 	Program  uint32
 
+	startTime int64
+
 	Io imgui.IO
 
 	updatedThisFrame bool
@@ -127,17 +129,14 @@ func initOpenGl() *glfw.Window {
 
 	// Initialize window through go-gl/glfw
 
-	//window, win_err := glfw.CreateWindow(GB_WINDOW_WIDTH*ScreenSizeMultiplier, GB_WINDOW_HEIGHT*ScreenSizeMultiplier, "Hello, world!", nil, nil)
-
-	//For now we draw the BG only
-	window, win_err := glfw.CreateWindow(internal.BG_WINDOW_X_Y*ScreenSizeMultiplier, internal.BG_WINDOW_X_Y*ScreenSizeMultiplier, "Background Layer", nil, nil)
+	window, win_err := glfw.CreateWindow(GB_WINDOW_WIDTH*ScreenSizeMultiplier, GB_WINDOW_HEIGHT*ScreenSizeMultiplier, "go-boy!", nil, nil)
 
 	if win_err != nil {
 		panic("Error creating window")
 	}
 
 	window.MakeContextCurrent()
-	glfw.SwapInterval(1)
+	glfw.SwapInterval(0)
 
 	if err := gl.Init(); err != nil {
 		panic("Error initializing OpenGL")
@@ -218,6 +217,14 @@ func (e *Emulator) SetupGL() {
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 
+	gl.GenTextures(1, &e.Ppu.BackgroundTex)
+	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.BackgroundTex)
+
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
 	// 2. Setup VAO and VBO
 	var vao, vbo uint32
 	gl.GenVertexArrays(1, &vao)
@@ -245,14 +252,6 @@ func (e *Emulator) SetupDebugTextures() {
 
 	gl.GenTextures(1, &e.Ppu.WindowTex)
 	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.WindowTex)
-
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-
-	gl.GenTextures(1, &e.Ppu.BackgroundTex)
-	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.BackgroundTex)
 
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
@@ -290,7 +289,7 @@ func (e *Emulator) Restart() {
 	e.Ppu.Cpu = e.Cpu
 	e.Cpu.Ppu = e.Ppu
 	e.Cpu.Memory.Ppu = e.Ppu
-
+	e.startTime = time.Now().UnixNano()
 	e.currentGame = internal.NewRom("./games/Dr.M.gb")
 	//e.currentGame = internal.NewRom("./games/Tetris.gb")
 
@@ -335,6 +334,7 @@ func changeBool(startNextTest *bool) {
 
 func (e *Emulator) Run() {
 	for !e.Window.ShouldClose() {
+
 		if e.Ppu.HandleGLUpdate {
 			glfw.PollEvents()
 		}
@@ -345,8 +345,8 @@ func (e *Emulator) Run() {
 
 func (e *Emulator) Render() {
 	if e.Ppu.HandleGLUpdate {
-		gl.Clear(gl.COLOR_BUFFER_BIT)
 
+		gl.Clear(gl.COLOR_BUFFER_BIT)
 		e.Ppu.Render()
 
 		gl.UseProgram(e.Program)
@@ -372,15 +372,20 @@ func (e *Emulator) Step() {
 	e.Cpu.UpdateTimers(ranMCyclesThisStep)
 
 	e.Ppu.Step(ranMCyclesThisStep)
-
 	e.ranMCyclesThisFrame += ranMCyclesThisStep
 
 	if e.ShouldRender() {
 		e.Render()
 	}
-
 	if e.ranMCyclesThisFrame >= MAX_CYCLES_PER_FRAME {
-		time.Sleep(time.Second / 60)
+		computeTime := time.Now().UnixNano() - e.startTime
+		waitTime := time.Nanosecond * time.Duration(16742706-computeTime)
+		println(waitTime)
+		if waitTime > 0 {
+
+			time.Sleep(waitTime)
+		}
+		e.startTime = time.Now().UnixNano()
 		e.updatedThisFrame = false
 		e.ranMCyclesThisFrame = 0
 	}

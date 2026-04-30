@@ -75,7 +75,6 @@ func (d *Debugger) RunEmulator() {
 	for !d.e.Window.ShouldClose() {
 
 		d.e.Window.MakeContextCurrent()
-		glfw.PollEvents()
 
 		if d.e.Io.WantTextInput() {
 			d.e.Impl.SetDefaultKeyCallback()
@@ -114,6 +113,7 @@ func (d *Debugger) RunEmulator() {
 
 func (d *Debugger) Render() {
 	if d.e.DelegateDrawToDebugger {
+		glfw.PollEvents()
 
 		d.e.DelegateDrawToDebugger = false
 

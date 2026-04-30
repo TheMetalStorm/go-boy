@@ -4,7 +4,10 @@ import (
 	"go-boy/debugger"
 	"go-boy/emulator"
 	"os"
+	"os/signal"
 	"runtime"
+	"runtime/pprof"
+	"syscall"
 )
 
 type Emulator = emulator.Emulator
@@ -36,14 +39,16 @@ func main() {
 
 	isDebugMode := false
 	test := false
+	profile := false
 	argsWithoutProg := os.Args[1:]
 	var logFile *os.File
-	if len(argsWithoutProg) >= 1 {
-		if argsWithoutProg[0] == "--debug" {
+	for _, arg := range argsWithoutProg {
+		switch arg {
+		case "--debug":
 			isDebugMode = true
-		} else if argsWithoutProg[0] == "--test" {
+		case "--test":
 			test = true
-		} else if argsWithoutProg[0] == "--log" {
+		case "--log":
 			filename := "gb-log"
 			os.Remove(filename)
 			var err error
@@ -51,9 +56,31 @@ func main() {
 			if err != nil {
 				panic(err)
 			}
-
+		case "--profile":
+			profile = true
 		}
+	}
 
+	if profile {
+		f, err := os.Create("cpu.prof")
+		if err != nil {
+			panic(err)
+		}
+		pprof.StartCPUProfile(f)
+
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT)
+		go func() {
+			<-sigCh
+			pprof.StopCPUProfile()
+			f.Close()
+			os.Exit(0)
+		}()
+
+		defer func() {
+			signal.Stop(sigCh)
+			pprof.StopCPUProfile()
+		}()
 	}
 
 	if logFile != nil {
