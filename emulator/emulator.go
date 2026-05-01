@@ -208,7 +208,12 @@ func compileShader(source string, shaderType uint32) uint32 {
 }
 
 func (e *Emulator) SetupGL() {
+
+	gl.Enable(gl.BLEND)
+	gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+
 	gl.Enable(gl.TEXTURE_2D)
+
 	gl.GenTextures(1, &e.Ppu.ViewPortTex)
 	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.ViewPortTex)
 
@@ -217,8 +222,24 @@ func (e *Emulator) SetupGL() {
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
 
+	gl.GenTextures(1, &e.Ppu.ViewPortObjTex)
+	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.ViewPortObjTex)
+
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
 	gl.GenTextures(1, &e.Ppu.BackgroundTex)
 	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.BackgroundTex)
+
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
+	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
+
+	gl.GenTextures(1, &e.Ppu.WindowTex)
+	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.WindowTex)
 
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
 	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
@@ -250,14 +271,6 @@ func (e *Emulator) SetupGL() {
 
 func (e *Emulator) SetupDebugTextures() {
 
-	gl.GenTextures(1, &e.Ppu.WindowTex)
-	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.WindowTex)
-
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE)
-	gl.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE)
-
 	gl.GenTextures(1, &e.Ppu.TileViewerTex)
 	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.TileViewerTex)
 
@@ -281,7 +294,26 @@ func (e *Emulator) SetWindow(window *glfw.Window) {
 	e.Window = window
 }
 
+func (e *Emulator) clearTextures() {
+	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.ViewPortTex)
+	gl.Clear(gl.COLOR_BUFFER_BIT)
+	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.ViewPortObjTex)
+	gl.Clear(gl.COLOR_BUFFER_BIT)
+	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.BackgroundTex)
+	gl.Clear(gl.COLOR_BUFFER_BIT)
+	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.WindowTex)
+	gl.Clear(gl.COLOR_BUFFER_BIT)
+	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.TileViewerTex)
+	gl.Clear(gl.COLOR_BUFFER_BIT)
+	gl.BindTexture(gl.TEXTURE_2D, e.Ppu.ObjOverviewTex)
+	gl.Clear(gl.COLOR_BUFFER_BIT)
+
+	gl.BindTexture(gl.TEXTURE_2D, 0)
+}
 func (e *Emulator) Restart() {
+
+	e.clearTextures()
+
 	e.Cpu.Restart()
 	e.Ppu.Restart(ScreenSizeMultiplier)
 	e.ranMCyclesThisFrame = 0
@@ -294,6 +326,7 @@ func (e *Emulator) Restart() {
 	//e.currentGame = internal.NewRom("./games/Tetris.gb")
 
 	e.LoadRom(e.currentGame)
+
 }
 
 func (e *Emulator) LoadRom(r *Rom) {
@@ -347,11 +380,9 @@ func (e *Emulator) Render() {
 	if e.Ppu.HandleGLUpdate {
 
 		gl.Clear(gl.COLOR_BUFFER_BIT)
-		e.Ppu.Render()
-
 		gl.UseProgram(e.Program)
 		gl.BindVertexArray(e.Vao)
-		gl.DrawArrays(gl.TRIANGLES, 0, 6)
+		e.Ppu.Render()
 
 		e.Window.SwapBuffers()
 	} else {
@@ -380,7 +411,6 @@ func (e *Emulator) Step() {
 	if e.ranMCyclesThisFrame >= MAX_CYCLES_PER_FRAME {
 		computeTime := time.Now().UnixNano() - e.startTime
 		waitTime := time.Nanosecond * time.Duration(16742706-computeTime)
-		println(waitTime)
 		if waitTime > 0 {
 
 			time.Sleep(waitTime)

@@ -12,12 +12,14 @@ type Ppu struct {
 	running          bool
 
 	ViewPortTex    uint32
+	ViewPortObjTex uint32
 	BackgroundTex  uint32
 	WindowTex      uint32
 	TileViewerTex  uint32
 	ObjOverviewTex uint32
 
 	viewportBuf    []color.RGBA
+	viewportObjBuf []color.RGBA
 	backgroundBuf  []color.RGBA
 	windowBuf      []color.RGBA
 	tileViewerBuf  []color.RGBA
@@ -75,7 +77,7 @@ func NewPpu(screenMultiplier int) *Ppu {
 	ppu.Restart(screenMultiplier)
 
 	ppu.viewportBuf = make([]color.RGBA, GB_WINDOW_WIDTH*GB_WINDOW_HEIGHT)
-
+	ppu.viewportObjBuf = make([]color.RGBA, GB_WINDOW_WIDTH*GB_WINDOW_HEIGHT)
 	ppu.backgroundBuf = make([]color.RGBA, BG_WINDOW_X_Y*BG_WINDOW_X_Y)
 
 	ppu.windowBuf = make([]color.RGBA, BG_WINDOW_X_Y*BG_WINDOW_X_Y)
@@ -88,12 +90,19 @@ func NewPpu(screenMultiplier int) *Ppu {
 }
 
 func (p *Ppu) Restart(screenMultiplier int) {
+
+	clear(p.viewportBuf)
+	clear(p.viewportObjBuf)
+	clear(p.backgroundBuf)
+	clear(p.windowBuf)
+	clear(p.objOverviewBuf)
+	clear(p.tileViewerBuf)
+
 	p.screenMultiplier = screenMultiplier
 	p.running = true
 	p.CurrentDot = 0
 	p.CurrentMode = MODE_2
 
-	//TODO: clear buffers (and tex)?
 }
 
 func (p *Ppu) Step(ranMCyclesThisStep uint64) {
@@ -173,9 +182,10 @@ var tileColor2 = color.RGBA{0xAA, 0xAA, 0xAA, 0xFF}
 var tileColor3 = color.RGBA{0x55, 0x55, 0x55, 0xFF}
 var tileColor4 = color.RGBA{0x00, 0x00, 0x00, 0xFF}
 
+// TODO: implement palette selection
+// TODO: when obj, some bits are transparent
 func getTileColor(bits int) color.RGBA {
-	// TODO: implement palette selection
-	// TODO: when obj, some bits are transparent
+
 	switch bits {
 	case 0:
 		return tileColor1
@@ -191,6 +201,8 @@ func getTileColor(bits int) color.RGBA {
 }
 
 func (p *Ppu) FillWindowMapData() {
+	clear(p.backgroundBuf)
+
 	var areaStart uint16
 	if !GetBit(p.Cpu.Memory.Io.GetLCDC(), 6) {
 		areaStart = 0x9800
@@ -280,7 +292,7 @@ func (p *Ppu) FillBackgroundMapData() {
 
 }
 
-//TODO: instead of revers do this?
+// TODO: instead of revers do this?
 // This is a quirk of Game Boy LCD hardware - bit 0 is actually the LEFTMOST pixel, not rightmost.
 // When iterating px = 0..7, you might be doing:
 // colorLsb = (byte >> px) & 1  // px=0 gets bit 0 (LEFT pixel on screen)
@@ -341,7 +353,7 @@ func ReadTileForObjects(relTileNumber uint16, c *Cpu) Tile {
 
 func ReadTile(tileDataOffset uint16, c *Cpu, isObject bool) Tile {
 
-	//TODO check if WORKS
+	// TODO check if WORKS
 
 	var tileStart uint16
 	_ = tileStart
@@ -429,13 +441,9 @@ func (p *Ppu) RenderObjOverview() {
 
 var BitMask = [...]uint8{0x1, 0x2, 0x4, 0x8, 0x10, 0x20, 0x40, 0x80}
 
-func (p *Ppu) FillObjOverviewData() {
-	isY16 := GetBit(p.Cpu.Memory.Io.GetLCDC(), 2) //0=8x8, 1=8x16
-	// var objYSize uint8 = 8
-	// if isY16 {
-	// 	objYSize = 16
-	// }
+func (p *Ppu) GenObjArray() []Object {
 
+	all := make([]Object, 40)
 	for i := 0; i < 40; i++ {
 		oamBase := 0xFE00 + uint16(i*4)
 		yPos, _ := p.Cpu.Memory.ReadByteAtForced(oamBase)
@@ -449,7 +457,19 @@ func (p *Ppu) FillObjOverviewData() {
 			tileInd:    tileInd,
 			attributes: attributes,
 		}
-
+		all[i] = obj
+	}
+	return all
+}
+func (p *Ppu) FillObjOverviewData() {
+	isY16 := GetBit(p.Cpu.Memory.Io.GetLCDC(), 2) //0=8x8, 1=8x16
+	// var objYSize uint8 = 8
+	// if isY16 {
+	// 	objYSize = 16
+	// }
+	objs := p.GenObjArray()
+	for i := 0; i < len(objs); i++ {
+		obj := objs[i]
 		tile := ReadTileForObjects(uint16(obj.tileInd), p.Cpu)
 		var tile2 Tile
 
@@ -457,14 +477,14 @@ func (p *Ppu) FillObjOverviewData() {
 			tile2 = ReadTileForObjects(uint16(obj.tileInd+16), p.Cpu)
 		}
 
-		if GetBit(attributes, 6) {
+		if GetBit(obj.attributes, 6) {
 			tile.FlipY()
 			if isY16 {
 				tile2.FlipY()
 				tile2, tile = tile, tile2
 			}
 		}
-		if GetBit(attributes, 5) {
+		if GetBit(obj.attributes, 5) {
 			tile.FlipX()
 			if isY16 {
 				tile2.FlipX()
@@ -473,9 +493,6 @@ func (p *Ppu) FillObjOverviewData() {
 
 		// TODO: implement attributes:
 		// Priority : 0 = No, 1 = BG and Window color indices 1–3 are drawn over this OBJ
-		// Y flip: 0 = Normal, 1 = Entire OBJ is vertically mirrored
-		// X flip: 0 = Normal, 1 = Entire OBJ is horizontally mirrored
-		// Ignore Priority for now since this is debug view
 
 		var lines = tile.Lines
 		var lines2 = tile2.Lines
@@ -573,46 +590,154 @@ func (p *Ppu) RenderBackgroundMapViewer() {
 		gl.Ptr(p.backgroundBuf))
 }
 
+var texData = []uint8{255, 255, 255, 255}
+
 func (p *Ppu) Render() {
+	clear(p.viewportBuf)
+	// TODO: with current rendering this shows white screen 99% of the time
+	// maybe we need to set ly = 0 when LCDC.7 is set to off? or this just doesnt work
+	// when rendering like this
+	// if GetBit(p.Cpu.Memory.Io.GetLCDC(), 7) {
+	// 	gl.BindTexture(gl.TEXTURE_2D, p.ViewPortTex)
+	// 	gl.TexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, (gl.Ptr(texData)))
+	// 	return
+	// }
 
-	//DEBUG TIME
-	// gl.BindTexture(gl.TEXTURE_2D, p.BackgroundTex)
-	// gl.Clear(gl.COLOR_BUFFER_BIT)
-	// p.FillBackgroundMapData()
+	// BG and window rendering to viewportTex
+	// TODO: palette selection for BG and window
+	if GetBit(p.Cpu.Memory.Io.GetLCDC(), 0) {
+		//Fill BG
+		p.FillBackgroundMapData()
 
-	// gl.TexImage2D(
-	// 	gl.TEXTURE_2D,
-	// 	0,
-	// 	gl.RGBA,
-	// 	int32(256),
-	// 	int32(256),
-	// 	0,
-	// 	gl.RGBA,
-	// 	gl.UNSIGNED_BYTE,
-	// 	gl.Ptr(p.backgroundBuf))
+		//probably faster way to to do this in gpu but this is not final way of rendering anyway
+		bgSubImage := extractRect(p.backgroundBuf,
+			int(p.Cpu.Memory.Io.GetSCX()),
+			int(p.Cpu.Memory.Io.GetSCY()),
+			GB_WINDOW_WIDTH,
+			GB_WINDOW_HEIGHT,
+			256)
 
-	//Fill BG
-	p.FillBackgroundMapData()
+		gl.BindTexture(gl.TEXTURE_2D, p.ViewPortTex)
+		gl.TexImage2D(
+			gl.TEXTURE_2D,
+			0,
+			gl.RGBA,
+			int32(GB_WINDOW_WIDTH),
+			int32(GB_WINDOW_HEIGHT),
+			0,
+			gl.RGBA,
+			gl.UNSIGNED_BYTE,
+			gl.Ptr(bgSubImage))
 
-	//probably faster way to to do this in gpu but this is not final way of rendering anyway
-	subImage := extractRect(p.backgroundBuf,
-		int(p.Cpu.Memory.Io.GetSCX()),
-		int(p.Cpu.Memory.Io.GetSCY()),
-		GB_WINDOW_WIDTH,
-		GB_WINDOW_HEIGHT,
-		256)
+		if GetBit(p.Cpu.Memory.Io.GetLCDC(), 5) {
 
+			// if this doesnt work:
+			// render viewporetWinTex like viewportTex
+			// then blend like with obj tex
+			p.FillWindowMapData()
+			windowSubImage := extractRect(p.windowBuf,
+				0,
+				0,
+				GB_WINDOW_WIDTH,
+				GB_WINDOW_HEIGHT,
+				256)
+
+			gl.PixelStorei(gl.UNPACK_ROW_LENGTH, 256)
+
+			xofs := int32(p.Cpu.Memory.Io.GetWX() - 7)
+			yofs := int32(p.Cpu.Memory.Io.GetWY())
+			gl.TexSubImage2D(gl.TEXTURE_2D, 0, xofs, yofs, int32(GB_WINDOW_WIDTH), int32(GB_WINDOW_HEIGHT), gl.RGBA, gl.UNSIGNED_BYTE, gl.Ptr(windowSubImage))
+
+			gl.PixelStorei(gl.UNPACK_ROW_LENGTH, 0)
+		}
+	}
+
+	// OBJ rendering to own tex
+	// TODO: obj priority and palette selection
+	if GetBit(p.Cpu.Memory.Io.GetLCDC(), 1) {
+		clear(p.viewportObjBuf)
+
+		isY16 := GetBit(p.Cpu.Memory.Io.GetLCDC(), 2) //0=8x8, 1=8x16
+		objs := p.GenObjArray()
+		for i := 0; i < len(objs); i++ {
+			obj := objs[i]
+			tile := ReadTileForObjects(uint16(obj.tileInd), p.Cpu)
+			var tile2 Tile
+
+			if isY16 {
+				tile2 = ReadTileForObjects(uint16(obj.tileInd+16), p.Cpu)
+			}
+
+			if GetBit(obj.attributes, 6) {
+				tile.FlipY()
+				if isY16 {
+					tile2.FlipY()
+					tile2, tile = tile, tile2
+				}
+			}
+			if GetBit(obj.attributes, 5) {
+				tile.FlipX()
+				if isY16 {
+					tile2.FlipX()
+				}
+			}
+
+			xPos := int32(obj.xPos - 8)
+			yPos := int32(obj.yPos - 16)
+
+			var lines = tile.Lines
+			var lines2 = tile2.Lines
+
+			var bufW int32 = int32(GB_WINDOW_WIDTH)
+
+			for py := int32(0); py < 16; py++ {
+				var currentLine [2]uint8
+				if py >= 8 {
+					currentLine = lines2[py-8]
+				} else {
+					currentLine = lines[py]
+				}
+				for px := int32(0); px < 8; px++ {
+					colorLsb := 0
+					colorMsb := 0
+					if GetBit(currentLine[0], uint8(px)) {
+						colorLsb = 1
+					}
+					if GetBit(currentLine[1], uint8(px)) {
+						colorMsb = 1
+					}
+					colorBits := colorLsb | (colorMsb << 1)
+					// bufIdx := (tileY*16+py)*bufW + (tileX*8 + px)
+					bufIdx := (yPos+py)*bufW + xPos + px
+					if bufIdx >= 0 && bufIdx < int32(len(p.viewportObjBuf)) {
+						p.viewportObjBuf[bufIdx] = getTileColor(colorBits)
+					}
+				}
+			}
+		}
+		gl.BindTexture(gl.TEXTURE_2D, p.ViewPortObjTex)
+
+		gl.Clear(gl.COLOR_BUFFER_BIT)
+
+		gl.TexImage2D(
+			gl.TEXTURE_2D,
+			0,
+			gl.RGBA,
+			int32(GB_WINDOW_WIDTH),
+			int32(GB_WINDOW_HEIGHT),
+			0,
+			gl.RGBA,
+			gl.UNSIGNED_BYTE,
+			gl.Ptr(p.viewportObjBuf))
+	}
+
+	// 1. Draw the first layer (Viewport)
 	gl.BindTexture(gl.TEXTURE_2D, p.ViewPortTex)
-	gl.TexImage2D(
-		gl.TEXTURE_2D,
-		0,
-		gl.RGBA,
-		int32(GB_WINDOW_WIDTH),
-		int32(GB_WINDOW_HEIGHT),
-		0,
-		gl.RGBA,
-		gl.UNSIGNED_BYTE,
-		gl.Ptr(subImage))
+	gl.DrawArrays(gl.TRIANGLES, 0, 6)
+
+	// Because gl.BLEND is on, this will draw OVER the first one
+	gl.BindTexture(gl.TEXTURE_2D, p.ViewPortObjTex)
+	gl.DrawArrays(gl.TRIANGLES, 0, 6)
 
 }
 

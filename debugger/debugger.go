@@ -113,20 +113,18 @@ func (d *Debugger) RunEmulator() {
 
 func (d *Debugger) Render() {
 	if d.e.DelegateDrawToDebugger {
+
+		// TODO:
+		// Polling events is MUCH faster
+		// BUT when stopping emulator it we cant start it, which sucks
 		glfw.PollEvents()
 
 		d.e.DelegateDrawToDebugger = false
-
-		d.e.Ppu.Render()
-
 		gl.UseProgram(d.e.Program)
 		gl.BindVertexArray(d.e.Vao)
-		gl.DrawArrays(gl.TRIANGLES, 0, 6)
+		d.e.Ppu.Render()
 
-		d.e.Impl.NewFrame()
 		d.RenderDebugger()
-		imgui.Render()
-		d.e.Impl.Render(imgui.RenderedDrawData())
 
 		d.e.Window.SwapBuffers()
 
@@ -150,6 +148,7 @@ func (d *Debugger) RenderObjOverview() {
 }
 
 func (d *Debugger) RenderDebugger() {
+	d.e.Impl.NewFrame()
 
 	imgui.Begin("VRAM")
 	if imgui.BeginTabBar("Viewers") {
@@ -254,6 +253,9 @@ func (d *Debugger) RenderDebugger() {
 	imgui.EndChild()
 
 	imgui.End()
+
+	imgui.Render()
+	d.e.Impl.Render(imgui.RenderedDrawData())
 }
 
 func (d *Debugger) debugKeyCallback(w *glfw.Window, key glfw.Key, scancode int, action glfw.Action, mods glfw.ModifierKey) {

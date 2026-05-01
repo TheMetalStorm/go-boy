@@ -29,7 +29,7 @@ func (cpu *Cpu) decodeExecute(instr byte) (cycles uint64) {
 			cpu.Halt = true
 		} else {
 			if activeInterrupts != 0 {
-				//TODO: handle
+				// TODO: handle
 				cpu.HaltBug = true
 			} else {
 				cpu.Halt = true
